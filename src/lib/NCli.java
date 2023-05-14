@@ -1,10 +1,8 @@
 package lib;
-import java.awt.Canvas;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
-import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +16,7 @@ import ihs.apcs.spacebattle.*;
 import ihs.apcs.spacebattle.commands.*;
 
 public class NCli {
-    private static class Async<T> {
+    private static final class Async<T> {
         private T value;
         private boolean flag = false;
 
@@ -42,15 +40,70 @@ public class NCli {
         }
     }
 
-    private static class Timeout {
+    private static final class Timeout {
         public final long end;
 
-        public Timeout(double duration) { this.end = System.currentTimeMillis() + (long)(duration * 1000); }
+        public Timeout(double duration) {
+            if(duration <= 0.01) this.end = Long.MAX_VALUE;
+            else this.end = System.currentTimeMillis() + (long)(duration * 1000);
+        }
 
         public boolean passed() { return System.currentTimeMillis() >= this.end; }
     }
 
-    public static class Vec {
+    private final class Sim {
+        public static final double TIME = 1.0 / 50.0; // https://github.com/Mikeware/SpaceBattleArena/blob/master/SBA_Serv/World/WorldMap.py#L24
+
+        public final Thread thread = new Thread(this::run, "NCli:Simulator");
+
+        public Vec pos;
+        public int ang;
+        public double speed;
+        public Vec vel;
+        public double health = 0;
+        public double shield = 0;
+        public double energy = 0;
+
+        public ShipCommand[] commands;
+
+        public Sim() {
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        public void update(BasicEnvironment env) {
+            ObjectStatus ss = env.getShipStatus();
+            this.pos = new Vec(ss.getPosition());
+            this.ang = ss.getOrientation();
+            this.speed = ss.getSpeed();
+            this.vel = Vec.polar(ss.getMovementDirection(), this.speed);
+            this.health = ss.getHealth();
+            this.shield = ss.getShieldLevel();
+            this.energy = ss.getEnergy();
+        }
+
+        public void cmd(ShipCommand cmd) {
+
+        }
+
+        public void simulate() {
+            NCli.this.canvas.revalidate();
+            NCli.this.canvas.repaint();
+        }
+
+        private void run() {
+            while(true) {
+                long start = System.currentTimeMillis();
+                this.simulate();
+                long dur = (long)(Sim.TIME * 1000) - (System.currentTimeMillis() - start);
+                if(dur > 0)
+                    try { Thread.sleep(dur); }
+                    catch (InterruptedException ex) { ex.printStackTrace(); }
+            }
+        }
+    }
+
+    public static final class Vec {
         public double x;
         public double y;
 
@@ -63,10 +116,10 @@ public class NCli {
 
         public Vec(Point pt) { this(pt.getX(), pt.getY()); }
 
-        public Vec polar(int angle, double magnitude) {
+        public static Vec polar(double angle, double magnitude) {
             double radians = Math.toRadians(angle);
 
-            return new Vec(Math.cos(radians) * magnitude, Math.sin(radians) * magnitude);
+            return new Vec(Math.cos(radians) * magnitude, Math.sin(radians) * -magnitude);
         }
 
         public Point point() { return new Point(this.x, this.y); }
@@ -171,7 +224,10 @@ public class NCli {
             this.pos = new Vec(this.ship.getPosition());
             this.ang = Utils.normalizeAngle(this.ship.getOrientation());
             this.speed = this.ship.getSpeed();
-            this.vel = new Vec(this.ship.getMovementDirection(), this.speed);
+            this.vel = Vec.polar(this.ship.getMovementDirection(), this.speed);
+            this.health = this.ship.getHealth();
+            this.shield = this.ship.getShieldLevel();
+            this.energy = this.ship.getEnergy();
         }
 
         // For the user to implement
@@ -188,10 +244,13 @@ public class NCli {
 
         protected BasicEnvironment env;
         protected ObjectStatus ship;
-        protected Vec pos;
-        protected int ang;
-        protected double speed;
-        protected Vec vel;
+        protected Vec pos = new Vec(0, 0);
+        protected int ang = 0;
+        protected double speed = 0;
+        protected Vec vel = new Vec(0, 0);
+        protected double health = 0;
+        protected double shield = 0;
+        protected double energy = 0;
 
         /**
          * Yields a command to the server
@@ -311,7 +370,7 @@ public class NCli {
                 Vec dir = target.sub(this.pos);
                 double distance = dir.length();
 
-                this.face(target);
+                if(faceTarget) this.face(target);
 
                 if(distance <= Utils.calculateDecelerationDistance(this.speed)) break;
                 else if(this.speed < maxSpeed) {
@@ -336,9 +395,13 @@ public class NCli {
             T initial = value.get();
             this.until(() -> !value.get().equals(initial), interval, timeout);
         }
+
+        protected final <T> void untilSufficientEnergy(double energy) {
+            this.until(() -> this.energy > energy, 0.1, 0);
+        }
     }
 
-    public static class Utils {
+    public static final class Utils {
         public static final double acceleration = 6.6;
 
         public static final int normalizeAngle(int angle) {
@@ -352,31 +415,14 @@ public class NCli {
         }
     }
 
-    private class Sim {
-        public Vec pos;
-        public int ang;
-        public double speed;
-        public Vec vel;
-
-        public ShipCommand[] commands;
-
-        public void update(BasicEnvironment env) {
-            ObjectStatus ss = env.getShipStatus();
-            this.pos = new Vec(ss.getPosition());
-            this.ang = ss.getOrientation();
-            this.speed = ss.getSpeed();
-            this.vel = new Vec(ss.getMovementDirection(), this.speed);
-        }
-    }
-
     // NCli
 
-    private final Thread coroutine;
     private final ShipComputer ship;
-    private final Sim sim = new Sim();
+    private final Thread coroutine;
+    private final Sim sim;
     private final JFrame frame = new JFrame("NCli");
     private final JPanel canvas = new JPanel() {
-        private Polygon tri = new Polygon(new int[] { -1, 1, -1 }, new int[] { -1, 0, 1 }, 3);
+        private final Polygon tri = new Polygon(new int[] { -2, 2, -2 }, new int[] { -1, 0, 1 }, 3);
 
         @Override
         public void paint(Graphics ctxi) {
@@ -387,32 +433,44 @@ public class NCli {
 
             ctx.clearRect(0, 0, width, height);
 
+            if(NCli.this.ship == null) return;
+
             this.trans(ctx, AffineTransform.getTranslateInstance(16, 16), () -> {
-                this.indicator(ctx, "Velocity: %.1f".formatted(NCli.this.ship.speed, NCli.this.ship.ang), NCli.this.ship.vel);
+                this.indicator(ctx, "Velocity: %.1f".formatted(NCli.this.ship.speed), NCli.this.ship.vel, 100);
             });
 
-            this.trans(ctx, AffineTransform.getTranslateInstance(16, 16 + 32 + 16), () -> {
-                this.indicator(ctx, "Accel".formatted(NCli.this.ship.speed, NCli.this.ship.ang), NCli.this.ship.vel);
+            this.trans(ctx, AffineTransform.getTranslateInstance(16, 16 + 128 + 16), () -> {
+                this.indicator(ctx, "Accel", NCli.this.ship.vel, 10);
+            });
+
+            ctx.setColor(new Color(0, 0, 0));
+
+            AffineTransform shipTransform = new AffineTransform();
+            shipTransform.translate(width / 2, height / 2);
+            shipTransform.scale(16, 16);
+            shipTransform.rotate(Math.toRadians(-NCli.this.ship.ang));
+            this.trans(ctx, shipTransform, () -> {
+                ctx.drawPolygon(this.tri.xpoints, this.tri.ypoints, this.tri.npoints);
             });
         }
 
-        private void indicator(Graphics2D ctx, String label, Vec value) {
-            ctx.draw3DRect(0, 0, 128, 128, false);
-            ctx.drawString(label, 4, 8);
+        private void indicator(Graphics2D ctx, String label, Vec value, double max) {
+            ctx.setColor(new Color(0, 0, 0));
 
-            ctx.setColor(new Color(255, 0, 0));
+            ctx.draw3DRect(0, 0, 128, 128, false);
+            ctx.drawString(label + value, 4, 16);
 
             AffineTransform shipTransform = new AffineTransform();
             shipTransform.translate(64, 64);
             shipTransform.scale(4, 4);
             shipTransform.rotate(Math.toRadians(-NCli.this.ship.ang));
             this.trans(ctx, shipTransform, () -> {
-                this.ship(ctx);
+                ctx.drawPolygon(this.tri);
             });
-        }
 
-        private void ship(Graphics2D ctx) {
-            ctx.drawPolygon(this.tri);
+            ctx.setColor(new Color(255, 0, 0));
+
+            ctx.drawLine(64, 64, 64 + (int)(value.x / max * 64), 64 + (int)(value.y / max * 64));
         }
 
         private void trans(Graphics2D ctx, AffineTransform trans, Runnable in) {
@@ -436,16 +494,18 @@ public class NCli {
     public NCli(String ip, ShipComputer ship) {
         this.ship = ship;
 
-        this.coroutine = new Thread(ship::execute, "ShipComputer");
+        this.coroutine = new Thread(ship::execute, "NCli:Coroutine");
         this.coroutine.setDaemon(true);
         this.coroutine.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread thread, Throwable exception) {
-                System.err.println("ShipComputer thread: uncaught exception:");
+                System.err.println("NCli:Coroutine Thread: uncaught exception:");
                 exception.printStackTrace();
             }
         });
         this.coroutine.start();
+
+        this.sim = new Sim();
 
         TextClient.run(ip, new BasicSpaceship() {
             @Override
@@ -456,9 +516,10 @@ public class NCli {
             @Override
             public ShipCommand getNextCommand(BasicEnvironment env) {
                 ship.rx.fulfill(env);
-                canvas.revalidate();
-                canvas.repaint();
-                return ship.tx.await();
+                NCli.this.sim.update(env);
+                ShipCommand cmd = ship.tx.await();
+                NCli.this.sim.cmd(cmd);
+                return cmd;
             }
 
             @Override
