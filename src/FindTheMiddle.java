@@ -19,13 +19,10 @@ public class FindTheMiddle extends NCli.ShipComputer {
     }
 
     @Override protected void run() {
-        // this.rotateTo(0);
-        // this.thrust(Direction.Right, 10, 1, false);
-        // this.thrust(Direction.Forward, 10, 1, true);
         while(true) {
-            //this.glideContinuous(this.center, 45, 1);
             long start = System.currentTimeMillis();
             this.glide(this.center, 100, false, 0.1, 30);
+            //this.glideBoost(this.center, 100, 3, 0.1, 30);
             this.untilChange(() -> this.env.getGameInfo().getScore(), 0.1, 3);
             this.untilSufficientEnergy(100);
             long dur = System.currentTimeMillis() - start;

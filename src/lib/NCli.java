@@ -88,7 +88,13 @@ public class NCli {
      * Simulates ship systems
      */
     private final class Sim {
+        /**
+         * A ShipCommand converted into a simulated command
+         */
         abstract class SimCommand {
+            /**
+             * Whether
+             */
             boolean initial = true;
 
             void once() {}
@@ -707,7 +713,6 @@ public class NCli {
          *
          * @return The amount of objects nearby
          * @apiNote Equivalent to an L1 scan
-         * @apiNote Blocking
          * @apiNote 0.03s duration
          */
         protected final int radarCount() {
@@ -720,7 +725,6 @@ public class NCli {
          *
          * @return The ID and position of nearby objects
          * @apiNote Equivalent to an L2 scan
-         * @apiNote Blocking
          * @apiNote 0.1s duration
          */
         protected final RadarResults radarBlind() {
@@ -734,7 +738,6 @@ public class NCli {
          * @param target The target ID to scan
          * @return Full object info of the target
          * @apiNote Equivalent to an L3 scan
-         * @apiNote Blocking
          * @apiNote 0.1s duration
          */
         protected final ObjectStatus radarTarget(int target) {
@@ -747,7 +750,6 @@ public class NCli {
          *
          * @return The ID, position, and type of nearby objects
          * @apiNote Equivalent to an L4 scan
-         * @apiNote Blocking
          * @apiNote 0.15s duration
          */
         protected final RadarResults radarExtended() {
@@ -760,7 +762,6 @@ public class NCli {
          *
          * @return Full object information of nearby objects
          * @apiNote Equivalent to an L5 scan
-         * @apiNote Blocking
          * @apiNote 0.4s duration
          */
         protected final RadarResults radarFull() {
@@ -775,8 +776,6 @@ public class NCli {
          * @param dir Direction to accelerate in relative to the ship (x-forward, y-right)
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
-         * @apiNote Blocking
-         * @apiNote {@code [dur]}s duration
          */
         protected final void thrust(Direction dir, double dur, double power, boolean blocking) { this.thrustVectored(dir.vec(), dur, power, blocking); }
 
@@ -790,8 +789,6 @@ public class NCli {
          * @param dir Direction to accelerate in relative to the ship (x-forward, y-right)
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
-         * @apiNote Blocking
-         * @apiNote {@code [dur]}s duration
          */
         protected final void thrustVectored(Vec dir, double dur, double power, boolean blocking) {
             dir = dir.normalize();
@@ -808,8 +805,6 @@ public class NCli {
          * @param dir Direction to accelerate in relative to the world (x-right, y-down)
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
-         * @apiNote Blocking
-         * @apiNote {@code time}s duration
          */
         protected final void thrustVectoredWorld(Vec dir, double dur, double power, boolean blocking) { this.thrustVectored(dir.rotate(this.ang), dur, power, blocking); }
 
@@ -959,12 +954,12 @@ public class NCli {
     public NCli(String ip, ShipComputer ship) {
         ship.cli = this;
 
-        this.canvas.setSize(1000, 1000);
+        this.canvas.setSize(1000, 750);
 
         this.frame.add(this.canvas);
         this.frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.frame.setVisible(true);
-        this.frame.setSize(1000, 1000);
+        this.frame.setSize(1000, 750);
         this.frame.setResizable(false);
         try {
             this.frame.setIconImage(ImageIO.read(new File("icon.png")));
