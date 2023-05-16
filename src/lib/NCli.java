@@ -97,6 +97,8 @@ public class NCli {
              */
             boolean initial = true;
 
+            double fullTime;
+
             void once() {}
             boolean isFinished() { return true; }
             void execute() {}
@@ -106,7 +108,7 @@ public class NCli {
 
             boolean blocking() { return true; }
 
-            abstract String description();
+            abstract String name();
             abstract double timeRemaining();
 
             protected final Object rgp(ShipCommand cmd, String name) {
@@ -132,10 +134,10 @@ public class NCli {
             @Override void execute() {
                 double amt;
                 if(this.deg < 0) {
-                    amt = -Sim.this.turnRate * Sim.TIME;
+                    amt = -Sim.TURN_RATE * Sim.TIME;
                     if(amt < this.deg) amt = this.deg;
                 } else {
-                    amt = Sim.this.turnRate * Sim.TIME;
+                    amt = Sim.TURN_RATE * Sim.TIME;
                     if(amt > this.deg) amt = this.deg;
                 }
                 this.deg -= amt;
@@ -145,8 +147,8 @@ public class NCli {
 
             @Override double getOngoingEnergyCost() { return 2; }
 
-            @Override String description() { return "Rotate"; }
-            @Override double timeRemaining() { return this.deg / Sim.this.turnRate; }
+            @Override String name() { return "Rotate"; }
+            @Override double timeRemaining() { return Math.abs(this.deg / Sim.TURN_RATE); }
         }
 
         class SimThrustCommand extends SimCommand {
@@ -173,8 +175,8 @@ public class NCli {
 
             @Override boolean blocking() { return this.blocking; }
 
-            @Override String description() { return "Thrust"; }
-            @Override double timeRemaining() { return this.duration; }
+            @Override String name() { return "Thrust"; }
+            @Override double timeRemaining() { return Math.max(this.duration, 0); }
         }
 
         class SimBrakeCommand extends SimCommand {
@@ -193,8 +195,8 @@ public class NCli {
 
             @Override boolean blocking() { return true; }
 
-            @Override String description() { return "Brake"; }
-            @Override double timeRemaining() { return (Sim.this.vel.length() - this.target) / Sim.ACCELERATION; }
+            @Override String name() { return "Brake"; }
+            @Override double timeRemaining() { return Math.max((Sim.this.vel.length() - this.target) / Sim.ACCELERATION, 0); }
         }
 
         class SimSteerCommand extends SimCommand {
@@ -210,10 +212,10 @@ public class NCli {
             @Override void execute() {
                 double amt;
                 if(this.deg < 0) {
-                    amt = -Sim.this.turnRate * Sim.TIME;
+                    amt = -Sim.TURN_RATE * Sim.TIME;
                     if(amt < this.deg) amt = this.deg;
                 } else {
-                    amt = Sim.this.turnRate * Sim.TIME;
+                    amt = Sim.TURN_RATE * Sim.TIME;
                     if(amt > this.deg) amt = this.deg;
                 }
                 this.deg -= amt;
@@ -225,8 +227,8 @@ public class NCli {
 
             @Override boolean blocking() { return this.blocking; }
 
-            @Override String description() { return "Rotate"; }
-            @Override double timeRemaining() { return this.deg / Sim.this.turnRate; }
+            @Override String name() { return "Rotate"; }
+            @Override double timeRemaining() { return Math.abs(this.deg / Sim.TURN_RATE); }
         }
 
         class SimIdleCommand extends SimCommand {
@@ -241,38 +243,40 @@ public class NCli {
                 this.duration -= Sim.TIME;
             }
 
-            @Override String description() { return "Idle"; }
-            @Override double timeRemaining() { return this.duration; }
+            @Override String name() { return "Idle"; }
+            @Override double timeRemaining() { return Math.max(this.duration, 0); }
         }
 
         /**
          * The minimum time per game tick
          * @implSpec Should be derived from {@link https://github.com/Mikeware/SpaceBattleArena/blob/master/SBA_Serv/World/WorldMap.py#L24}
          */
-        public static final double TIME = 1.0 / 30.0;
+        public static final double TIME = 1.0 / 60.0;
 
         public static final double ACCELERATION = 6.6;
+        public static final int TURN_RATE = 120;
+        public static final double MAX_SPEED = 100;
+        public static final int RADAR_RANGE = 300;
 
         /**
          * The thread the simulator runs on
          */
         final Thread thread = new Thread(this::run, "NCli:Simulator");
 
-        public int turnRate = 120;
-        public double maxSpeed = 100;
-        public int radarRange = 300;
+        double consumedThisTick = 0;
 
         public String status = "";
 
+        // Simulated Stats
         Vec pos = new Vec(0, 0);
         double ang = 0;
         Vec vel = new Vec(0, 0);
         double energy = 0;
+        double health = 0;
+        double shields = 0;
 
-        double lastHealth = 0;
-        double lastShield = 0;
-
-        double consumedThisTick = 0;
+        // Non-simulated Stats
+        double lastScore = 0;
 
         final List<SimCommand> commands = Collections.synchronizedList(new ArrayList<SimCommand>());
 
@@ -284,17 +288,14 @@ public class NCli {
         synchronized void update(BasicEnvironment env) {
             final ObjectStatus ss = env.getShipStatus();
 
-            this.turnRate = ss.getRotationSpeed();
-            this.maxSpeed = ss.getMaxSpeed();
-            this.radarRange = ss.getRadarRange();
-
             this.pos = new Vec(ss.getPosition());
             this.ang = Utils.normalizeAngle(ss.getOrientation());
             this.vel = Vec.polar(ss.getMovementDirection(), ss.getSpeed());
             this.energy = ss.getEnergy();
 
-            this.lastHealth = ss.getHealth();
-            this.lastShield = ss.getShieldLevel();
+            this.health = ss.getHealth();
+            this.shields = ss.getShieldLevel();
+            this.lastScore = env.getGameInfo().getScore();
         }
 
         synchronized void cmd(ShipCommand cmd) {
@@ -313,7 +314,7 @@ public class NCli {
         }
 
         synchronized void unblock() {
-            this.commands.removeIf(SimCommand::blocking);
+            //this.commands.removeIf(SimCommand::blocking);
         }
 
         boolean consume(double energy) {
@@ -337,7 +338,10 @@ public class NCli {
                 if(cmd.initial && !this.consume(cmd.getInstantEnergyCost())) {
                     iter.remove();
                 } else {
-                    if(cmd.initial) cmd.once();
+                    if(cmd.initial) {
+                        cmd.once();
+                        cmd.fullTime = cmd.timeRemaining();
+                    }
                     cmd.initial = false;
 
                     boolean outOfEnergy = !this.consume(cmd.getOngoingEnergyCost() * Sim.TIME);
@@ -359,17 +363,18 @@ public class NCli {
                 long start = System.currentTimeMillis();
                 this.simulate();
                 long dur = (long)(Sim.TIME * 1000) - (System.currentTimeMillis() - start);
-                if(dur > 0)
+                if(dur >= 0)
                     try { Thread.sleep(dur); }
                     catch (InterruptedException ex) { ex.printStackTrace(); }
+                else System.out.printf("loop overrun: %.4fs\n", Math.abs((double)dur / 1000));
             }
         }
     }
 
     private final class Panel extends JPanel {
-        private final Polygon tri = new Polygon(new int[] { -4, 12, -4 }, new int[] { -4, 0, 4 }, 3);
+        private final Polygon tri = new Polygon(new int[] { -4, 0, 8, 0, -4 }, new int[] { -4, -1, 0, 1, 4 }, 5);
 
-        private final Font font = new Font("Roboto Mono", Font.PLAIN, 14);
+        private final Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12);
 
         private final Color background = new Color(16, 16, 16);
         private final Color frameBackground = new Color(64, 64, 64);
@@ -378,7 +383,9 @@ public class NCli {
         private final Color foreground = new Color(255, 255, 255);
         private final Color shipIndicator = new Color(96, 96, 96);
 
-        private final Color energy = new Color(255, 255, 64);
+        private final Color red = new Color(255, 64, 64);
+        private final Color yellow = new Color(255, 255, 64);
+        private final Color green = new Color(64, 255, 64);
 
         @Override public void paint(Graphics graphics) {
             Graphics2D render = (Graphics2D)graphics;
@@ -398,7 +405,8 @@ public class NCli {
             }
 
             render.setColor(this.foreground);
-            this.center(render, NCli.this.sim.status, width / 2, 256);
+            String[] lines = NCli.this.sim.status.split("\n");
+            for(int i = 0; i < lines.length; i++) this.center(render, lines[i], width / 2, 128 + 12 * i);
 
             // Stats
 
@@ -406,7 +414,7 @@ public class NCli {
                 render.setColor(this.frameBackground);
                 render.fill3DRect(-256, 16, 512, 16, false);
 
-                render.setColor(this.energy);
+                render.setColor(this.yellow);
                 render.fillRect(-256 + 4, 16 + 4, (int)((512 - 8) * (NCli.this.sim.energy / 100)), 16 - 8);
 
                 this.center(render, "%.1f%%".formatted(NCli.this.sim.energy), 0, 64 - 16);
@@ -414,16 +422,16 @@ public class NCli {
                 int net = (int)((-NCli.this.sim.consumedThisTick / Sim.TIME) + 4);
 
                 if(net == 0) {
-                    render.setColor(this.energy);
+                    render.setColor(this.yellow);
                     this.center(render, "±0", 0, 64);
                 } else if(net > 0) {
-                    render.setColor(new Color(64, 255, 64));
+                    render.setColor(this.green);
                     this.center(render, "+%d".formatted(net), 0, 64);
-                    for(int i = 0; i < net; i++) render.fillRect(32 + 10 * i - 4, 64 - 4, 8, 8);
+                    for(int i = 0; i < net; i++) render.fillRect(32 + 10 * i - 4, 64 - 2, 8, 8);
                 } else {
-                    render.setColor(new Color(255, 64, 64));
+                    render.setColor(this.red);
                     this.center(render, Integer.toString(net), 0, 64);
-                    for(int i = 0; i < -net; i++) render.fillRect(-32 - 10 * i - 4, 64 - 4, 8, 8);
+                    for(int i = 0; i < -net; i++) render.drawRect(-32 - 10 * i - 4, 64 - 2, 8, 8);
                 }
             });
 
@@ -433,7 +441,40 @@ public class NCli {
                 for(int i = 0; i < NCli.this.sim.commands.size(); i++) {
                     Sim.SimCommand cmd = NCli.this.sim.commands.get(i);
                     this.frame(render, 16, 16 + 128 * i, 256, 128, false, (Integer sw, Integer sh) -> {
-                        this.center(render, cmd.description(), sw / 2, sh / 2);
+                        render.setColor(this.foreground);
+
+                        if(cmd instanceof Sim.SimRotateCommand) {
+                            Sim.SimRotateCommand rcmd = (Sim.SimRotateCommand)cmd;
+                            render.drawArc(sw / 2 - 32, sh / 2 - 32, 64, 64, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
+                            render.setColor(this.shipIndicator);
+                            AffineTransform shipTransform = new AffineTransform();
+                            shipTransform.translate(sw / 2, sh / 2);
+                            shipTransform.scale(2, 2);
+                            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
+                            this.trans(render, shipTransform, () -> this.ship(render));
+                        }
+
+                        render.setColor(this.foreground);
+                        this.center(render, cmd.name(), sw / 2, 8);
+
+                        if(cmd.blocking()) {
+                            render.setColor(this.red);
+                            this.center(render, " B", sw - 16, sh - 16);
+                        } else {
+                            render.setColor(this.green);
+                            this.center(render, "NB", sw - 16, sh - 16);
+                        }
+
+                        int cost = (int)cmd.getOngoingEnergyCost();
+                        if(cmd.initial) cost += (int)cmd.getInstantEnergyCost();
+
+                        render.setColor(this.red);
+                        this.center(render, Integer.toString(cost), 16, sh - 16);
+                        for(int j = 0; j < cost; j++) render.drawRect(32 + 10 * j - 4, sh - 16 - 2, 8, 8);
+
+                        render.setColor(this.green);
+                        this.center(render, "%.2f / %.2f".formatted(cmd.timeRemaining(), cmd.fullTime), sw / 2, sh - 16);
+                        render.fillRect(4, sh - 4 - 4, (int)((sw - 4 - 4) * (cmd.timeRemaining() / cmd.fullTime)), 2);
                     });
                 }
             });
@@ -506,7 +547,6 @@ public class NCli {
 
         private void ship(Graphics2D render) {
             render.drawPolygon(this.tri);
-            render.fillRect(-1, -1, 2, 2);
         }
 
         private void center(Graphics2D render, String text, int x, int y) {
@@ -845,27 +885,6 @@ public class NCli {
             this.brake();
         }
 
-        protected final void glideContinuous(Vec target, double timeout, int boosts) {
-            Timeout tout = new Timeout(timeout);
-
-            this.face(target);
-            this.boost(Direction.Forward, timeout, 1, boosts, false);
-
-            while(!tout.passed()) {
-                Vec dir = target.sub(this.pos);
-                double distance = dir.length();
-
-                if(distance <= Utils.calculateDecelerationDistance(this.speed)) break;
-                else if(!this.face(target)) this.idle(0.1);
-            }
-
-            System.err.println("slow");
-
-            this.cancel();
-            this.brake();
-            this.cancel();
-        }
-
         protected final void glideBoost(Vec target, double maxSpeed, int boosts, double thrustDuration, double timeout) {
             Timeout tout = new Timeout(timeout);
 
@@ -892,14 +911,12 @@ public class NCli {
         // Misc
 
         protected final void cancel() {
-            this.steer(1, false);
-
-            for(int i = 1; i < 3; i++) {
-                this.steer(-1, false);
-                this.steer(1, false);
+            for(int i = 0; i < 1; i++) {
+                for(int j = 0; j < 3; j++) {
+                    this.steer(-1, false);
+                    this.steer(1, j == 2);
+                }
             }
-
-            this.steer(-1, true);
         }
 
         protected final void idle(double time) { this.yield(new IdleCommand(time)); }
