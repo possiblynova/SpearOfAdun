@@ -2,6 +2,7 @@ import java.awt.Color;
 
 import ihs.apcs.spacebattle.RegistrationData;
 import lib.NCli;
+import lib.NCli.Direction;
 
 public class FindTheMiddle extends NCli.ShipComputer {
     public static void main(String[] args) throws Exception {

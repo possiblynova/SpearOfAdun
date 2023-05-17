@@ -227,7 +227,7 @@ public class NCli {
 
             @Override boolean blocking() { return this.blocking; }
 
-            @Override String name() { return "Rotate"; }
+            @Override String name() { return "Steer"; }
             @Override double timeRemaining() { return Math.abs(this.deg / Sim.TURN_RATE); }
         }
 
@@ -251,7 +251,7 @@ public class NCli {
          * The minimum time per game tick
          * @implSpec Should be derived from {@link https://github.com/Mikeware/SpaceBattleArena/blob/master/SBA_Serv/World/WorldMap.py#L24}
          */
-        public static final double TIME = 1.0 / 60.0;
+        public static final double TIME = 1.0 / 30.0;
 
         public static final double ACCELERATION = 6.6;
         public static final int TURN_RATE = 120;
@@ -437,15 +437,24 @@ public class NCli {
 
             // Commands
 
-            this.frame(render, width - 16 - 256 - 32, height - 16 - 512 - 32, 256 + 32, 512 + 32, (Integer w, Integer h) -> {
+            this.frame(render, width - 16 - 256 - 32, height - 16 - 256 - 32, 256 + 32, 256 + 32, (Integer w, Integer h) -> {
                 for(int i = 0; i < NCli.this.sim.commands.size(); i++) {
                     Sim.SimCommand cmd = NCli.this.sim.commands.get(i);
-                    this.frame(render, 16, 16 + 128 * i, 256, 128, false, (Integer sw, Integer sh) -> {
+                    this.frame(render, 16, 16 + 64 * i, 256, 64, false, (Integer sw, Integer sh) -> {
                         render.setColor(this.foreground);
 
                         if(cmd instanceof Sim.SimRotateCommand) {
                             Sim.SimRotateCommand rcmd = (Sim.SimRotateCommand)cmd;
-                            render.drawArc(sw / 2 - 32, sh / 2 - 32, 64, 64, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
+                            render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
+                            render.setColor(this.shipIndicator);
+                            AffineTransform shipTransform = new AffineTransform();
+                            shipTransform.translate(sw / 2, sh / 2);
+                            shipTransform.scale(2, 2);
+                            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
+                            this.trans(render, shipTransform, () -> this.ship(render));
+                        } else if(cmd instanceof Sim.SimSteerCommand) {
+                            Sim.SimSteerCommand rcmd = (Sim.SimSteerCommand)cmd;
+                            render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
                             render.setColor(this.shipIndicator);
                             AffineTransform shipTransform = new AffineTransform();
                             shipTransform.translate(sw / 2, sh / 2);
@@ -616,7 +625,7 @@ public class NCli {
             );
         }
 
-        public double angle() { return Math.toDegrees(Math.atan2(this.y, this.x)); }
+        public double angle() { return -Math.toDegrees(Math.atan2(this.y, this.x)); }
 
         public Vec swap() { return new Vec(this.y, this.x); }
 
@@ -878,8 +887,12 @@ public class NCli {
                 if(distance <= Utils.calculateDecelerationDistance(this.speed)) break;
                 else if(this.speed < maxSpeed) {
                     if(faceTarget) this.thrust(Direction.Forward, thrustDuration, 1, false);
-                    else this.thrustVectoredWorld(dir, thrustDuration, 1, false);
+                    else {
+                        this.thrustVectoredWorld(dir, thrustDuration, 1, false);
+                    }
                 } else this.idle(0.1);
+
+                this.steerToFace(target, true);
             }
 
             this.brake();
@@ -897,16 +910,26 @@ public class NCli {
                 if(distance <= Utils.calculateDecelerationDistance(this.speed)) break;
                 else if(this.speed < maxSpeed) this.boost(Direction.Forward, thrustDuration, 1, boosts, true);
                 else this.idle(0.1);
+
+                this.steerToFace(target, true);
             }
 
             this.brake();
         }
 
-        protected final void steer(int ang, boolean blocking) {
-            this.yield(new SteerCommand(ang, blocking));
+        protected final boolean steer(int offset, boolean blocking) {
+            if(offset == 0) return false;
+            this.yield(new SteerCommand(offset, blocking));
+            return true;
         }
 
-        protected final void steer(int ang) { this.steer(ang, true); }
+        protected final boolean steerTo(int angle, boolean blocking) {
+            return this.steer(Utils.normalizeAngle(angle - (int)this.vel.angle()), blocking);
+        }
+
+        protected final boolean steerToFace(Vec target, boolean blocking) {
+            return this.steerTo((int)-Math.toDegrees(Math.atan2(target.y - this.pos.y, target.x - this.pos.x)), blocking);
+        }
 
         // Misc
 
