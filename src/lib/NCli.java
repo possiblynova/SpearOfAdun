@@ -907,14 +907,16 @@ public class NCli {
 
                 this.face(target);
 
-                if(distance <= Utils.calculateDecelerationDistance(this.speed)) break;
+                if(distance <= Utils.calculateDecelerationDistance(this.speed, Sim.ACCELERATION * 2)) break;
                 else if(this.speed < maxSpeed) this.boost(Direction.Forward, thrustDuration, 1, boosts, true);
                 else this.idle(0.1);
 
                 this.steerToFace(target, true);
             }
 
-            this.brake();
+            //this.brake();
+
+            this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * 2), 1, boosts, true);
         }
 
         protected final boolean steer(int offset, boolean blocking) {
@@ -972,7 +974,11 @@ public class NCli {
         }
 
         public static final double calculateDecelerationDistance(double velocity) {
-            return (velocity * velocity) / (2 * Sim.ACCELERATION);
+            return Utils.calculateDecelerationDistance(velocity, Sim.ACCELERATION);
+        }
+
+        public static final double calculateDecelerationDistance(double velocity, double acceleration) {
+            return (velocity * velocity) / (2 * acceleration);
         }
     }
 
