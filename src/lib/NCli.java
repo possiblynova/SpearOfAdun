@@ -253,7 +253,7 @@ public class NCli {
          */
         public static final double TIME = 1.0 / 30.0;
 
-        public static final double ACCELERATION = 6.6;
+        public static final double ACCELERATION = 6.58;
         public static final int TURN_RATE = 120;
         public static final double MAX_SPEED = 100;
         public static final int RADAR_RANGE = 300;
@@ -907,7 +907,7 @@ public class NCli {
 
                 this.face(target);
 
-                if(distance <= Utils.calculateDecelerationDistance(this.speed, Sim.ACCELERATION * 2)) break;
+                if(distance <= Utils.calculateDecelerationDistance(this.speed, Sim.ACCELERATION * (boosts + 1))) break;
                 else if(this.speed < maxSpeed) this.boost(Direction.Forward, thrustDuration, 1, boosts, true);
                 else this.idle(0.1);
 
@@ -916,7 +916,7 @@ public class NCli {
 
             //this.brake();
 
-            this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * 2), 1, boosts, true);
+            this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * (boosts + 1)), 1, boosts, true);
         }
 
         protected final boolean steer(int offset, boolean blocking) {
