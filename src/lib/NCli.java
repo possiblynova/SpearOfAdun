@@ -1086,7 +1086,7 @@ public class NCli {
 
                 this.face(target);
 
-                if(distance <= Utils.calculateDecelerationDistance(this.speed, Sim.ACCELERATION * 2)) break;
+                if(distance <= Utils.calculateDecelerationDistance(this.speed, Sim.ACCELERATION * (boosts + 1))) break;
                 else if(this.speed < maxSpeed) this.boost(Direction.Forward, thrustDuration, 1, boosts, true);
                 else this.idle(0.1);
 
@@ -1095,7 +1095,7 @@ public class NCli {
 
             //this.brake();
 
-            this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * 2), 1, boosts, true);
+            this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * (boosts + 1)), 1, boosts, true);
         }
 
         protected final boolean steer(final int offset, final boolean blocking) {
