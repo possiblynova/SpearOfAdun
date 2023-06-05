@@ -1,10 +1,25 @@
 package lib;
+import java.awt.Point;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
+import java.awt.Rectangle;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowFocusListener;
+import java.awt.event.WindowListener;
+import java.awt.event.WindowStateListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.io.File;
@@ -39,8 +54,8 @@ public class NCli {
                 if(!this.flag) this.wait();
 
                 return this.value;
-            } catch(InterruptedException ex) {
-                throw new RuntimeException(ex);
+            } catch(final InterruptedException ex) {
+                throw new Error(ex);
             } finally {
                 this.flag = false;
             }
@@ -52,7 +67,7 @@ public class NCli {
          * @see Async#await()
          * @apiNote Fulfilling a demand can happen before the await, in this case {@code await} will not block
          */
-        public synchronized void fulfill(T value) {
+        public synchronized void fulfill(final T value) {
             this.flag = true;
             this.value = value;
 
@@ -73,7 +88,7 @@ public class NCli {
          * Construct a timeout
          * @param duration Duration the timeout should last in seconds
          */
-        public Timeout(double duration) {
+        public Timeout(final double duration) {
             if(duration <= 0.01) this.end = Long.MAX_VALUE;
             else this.end = System.currentTimeMillis() + (long)(duration * 1000);
         }
@@ -87,7 +102,7 @@ public class NCli {
     /**
      * Simulates ship systems
      */
-    private final class Sim {
+    public final class Sim {
         /**
          * A ShipCommand converted into a simulated command
          */
@@ -111,14 +126,14 @@ public class NCli {
             abstract String name();
             abstract double timeRemaining();
 
-            protected final Object rgp(ShipCommand cmd, String name) {
+            protected final Object rgp(final ShipCommand cmd, final String name) {
                 try {
-                    Class<?> klass = cmd.getClass();
-                    Field field = klass.getDeclaredField(name);
+                    final Class<?> klass = cmd.getClass();
+                    final Field field = klass.getDeclaredField(name);
                     field.setAccessible(true);
                     return field.get(cmd);
-                } catch(Exception e) {
-                    throw new RuntimeException(e);
+                } catch(final Exception e) {
+                    throw new Error(e);
                 }
             }
         }
@@ -126,7 +141,7 @@ public class NCli {
         class SimRotateCommand extends SimCommand {
             double deg;
 
-            public SimRotateCommand(RotateCommand cmd) {
+            public SimRotateCommand(final RotateCommand cmd) {
                 this.deg = Utils.normalizeAngle((Integer)this.rgp(cmd, "DEG"));
             }
 
@@ -157,7 +172,7 @@ public class NCli {
             final double power;
             final boolean blocking;
 
-            public SimThrustCommand(ThrustCommand cmd) {
+            public SimThrustCommand(final ThrustCommand cmd) {
                 this.dir = Direction.fromThrust((Character)this.rgp(cmd, "DIR"));
                 this.duration = (Double)this.rgp(cmd, "DUR");
                 this.power = (Double)this.rgp(cmd, "PER");
@@ -182,7 +197,7 @@ public class NCli {
         class SimBrakeCommand extends SimCommand {
             final double target;
 
-            public SimBrakeCommand(BrakeCommand cmd) {
+            public SimBrakeCommand(final BrakeCommand cmd) {
                 this.target = (Double)this.rgp(cmd, "PER");
             }
 
@@ -203,7 +218,7 @@ public class NCli {
             double deg;
             final boolean blocking;
 
-            public SimSteerCommand(SteerCommand cmd) {
+            public SimSteerCommand(final SteerCommand cmd) {
                 this.deg = Utils.normalizeAngle((Integer)this.rgp(cmd, "DEG"));
                 this.blocking = (Boolean)this.rgp(cmd, "BLOCK");
             }
@@ -234,7 +249,7 @@ public class NCli {
         class SimIdleCommand extends SimCommand {
             double duration;
 
-            public SimIdleCommand(IdleCommand cmd) {
+            public SimIdleCommand(final IdleCommand cmd) {
                 this.duration = (Double)this.rgp(cmd, "DUR");
             }
 
@@ -253,10 +268,11 @@ public class NCli {
          */
         public static final double TIME = 1.0 / 30.0;
 
-        public static final double ACCELERATION = 6.6;
-        public static final int TURN_RATE = 120;
-        public static final double MAX_SPEED = 100;
-        public static final int RADAR_RANGE = 300;
+        public static final double ACCELERATION = 6.58;
+        public static final double TURN_RATE = 120.0;
+        public static final double MAX_SPEED = 100.0;
+        public static final double RADAR_RANGE = 300.0;
+        public static final double TORPEDO_SPEED = 15000.0 / 60.0;
 
         /**
          * The thread the simulator runs on
@@ -265,7 +281,7 @@ public class NCli {
 
         double consumedThisTick = 0;
 
-        public String status = "";
+        String status = "";
 
         // Simulated Stats
         Vec pos = new Vec(0, 0);
@@ -285,7 +301,7 @@ public class NCli {
             this.thread.start();
         }
 
-        synchronized void update(BasicEnvironment env) {
+        synchronized void update(final BasicEnvironment env) {
             final ObjectStatus ss = env.getShipStatus();
 
             this.pos = new Vec(ss.getPosition());
@@ -298,7 +314,7 @@ public class NCli {
             this.lastScore = env.getGameInfo().getScore();
         }
 
-        synchronized void cmd(ShipCommand cmd) {
+        synchronized void cmd(final ShipCommand cmd) {
             SimCommand scmd;
 
             if(cmd instanceof RotateCommand) scmd = new SimRotateCommand((RotateCommand)cmd);
@@ -314,11 +330,11 @@ public class NCli {
         }
 
         synchronized void unblock() {
-            //this.commands.removeIf(SimCommand::blocking);
+            this.commands.removeIf(SimCommand::blocking);
         }
 
-        boolean consume(double energy) {
-            boolean sufficient = this.energy >= energy;
+        boolean consume(final double energy) {
+            final boolean sufficient = this.energy >= energy;
             if(sufficient) {
                 this.energy -= energy;
                 this.consumedThisTick += energy;
@@ -327,32 +343,30 @@ public class NCli {
         }
 
         synchronized void simulate() {
-            this.consumedThisTick = 0;
+            if(NCli.this.ready) {
+                this.consumedThisTick = 0;
 
-            for(Iterator<SimCommand> iter = this.commands.iterator(); iter.hasNext();) {
-                SimCommand cmd = iter.next();
-                // if(!this.consume(cmd.getOngoingEnergyCost() * Sim.TIME) || cmd.execute()) {
-                //     cmd.end();
-                //     iter.remove();
-                // }
-                if(cmd.initial && !this.consume(cmd.getInstantEnergyCost())) {
-                    iter.remove();
-                } else {
-                    if(cmd.initial) {
-                        cmd.once();
-                        cmd.fullTime = cmd.timeRemaining();
-                    }
-                    cmd.initial = false;
-
-                    boolean outOfEnergy = !this.consume(cmd.getOngoingEnergyCost() * Sim.TIME);
-                    if(outOfEnergy || cmd.isFinished()) {
+                for(final Iterator<SimCommand> iter = this.commands.iterator(); iter.hasNext();) {
+                    final SimCommand cmd = iter.next();
+                    if(cmd.initial && !this.consume(cmd.getInstantEnergyCost())) {
                         iter.remove();
-                    } else cmd.execute();
-                }
-            }
+                    } else {
+                        if(cmd.initial) {
+                            cmd.once();
+                            cmd.fullTime = cmd.timeRemaining();
+                        }
+                        cmd.initial = false;
 
-            this.pos = this.pos.add(this.vel.mul(new Vec(Sim.TIME))).mod(new Vec(NCli.this.width, NCli.this.height));
-            this.energy = Math.min(100, this.energy + 4 * Sim.TIME);
+                        final boolean outOfEnergy = !this.consume(cmd.getOngoingEnergyCost() * Sim.TIME);
+                        if(outOfEnergy || cmd.isFinished()) {
+                            iter.remove();
+                        } else cmd.execute();
+                    }
+                }
+
+                this.pos = this.pos.add(this.vel.mul(new Vec(Sim.TIME))).mod(NCli.this.size);
+                this.energy = Math.min(100, this.energy + 4 * Sim.TIME);
+            }
 
             NCli.this.canvas.revalidate();
             NCli.this.canvas.repaint();
@@ -360,215 +374,313 @@ public class NCli {
 
         void run() {
             while(true) {
-                long start = System.currentTimeMillis();
+                final long start = System.currentTimeMillis();
                 this.simulate();
-                long dur = (long)(Sim.TIME * 1000) - (System.currentTimeMillis() - start);
+                final long dur = (long)(Sim.TIME * 1000) - (System.currentTimeMillis() - start);
                 if(dur >= 0)
                     try { Thread.sleep(dur); }
-                    catch (InterruptedException ex) { ex.printStackTrace(); }
+                    catch (final InterruptedException ex) { ex.printStackTrace(); }
                 else System.out.printf("loop overrun: %.4fs\n", Math.abs((double)dur / 1000));
             }
         }
     }
 
-    private final class Panel extends JPanel {
-        private final Polygon tri = new Polygon(new int[] { -4, 0, 8, 0, -4 }, new int[] { -4, -1, 0, 1, 4 }, 5);
+    private final class Panel extends JPanel implements KeyListener, MouseListener, MouseMotionListener, MouseWheelListener {
+        private final static Polygon tri = new Polygon(new int[] { -4, 4, 16, 4, -4 }, new int[] { -4, 4, 0, -4, 4 }, 5);
 
-        private final Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        private final static Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        private final static Font fontBig = new Font(Font.MONOSPACED, Font.PLAIN, 32);
 
-        private final Color background = new Color(16, 16, 16);
-        private final Color frameBackground = new Color(64, 64, 64);
-        private final Color frameGrid = new Color(32, 32, 32);
+        private final static Color background = new Color(16, 16, 16);
+        private final static Color frameBackground = new Color(64, 64, 64);
+        private final static Color frameGrid = new Color(32, 32, 32);
 
-        private final Color foreground = new Color(255, 255, 255);
-        private final Color shipIndicator = new Color(96, 96, 96);
+        private final static Color foreground = new Color(255, 255, 255);
+        private final static Color shipIndicator = new Color(96, 96, 96);
 
-        private final Color red = new Color(255, 64, 64);
-        private final Color yellow = new Color(255, 255, 64);
-        private final Color green = new Color(64, 255, 64);
+        private final static Color red = new Color(255, 64, 64);
+        private final static Color yellow = new Color(255, 255, 64);
+        private final static Color green = new Color(64, 255, 64);
 
-        @Override public void paint(Graphics graphics) {
-            Graphics2D render = (Graphics2D)graphics;
+        private Graphics2D render;
 
-            int width = this.getWidth();
-            int height = this.getHeight();
+        private final Rectangle vPanelBounds = new Rectangle();
+        private final Rectangle mapBounds = new Rectangle();
 
-            render.setColor(this.background);
-            render.fillRect(0, 0, width, height);
+        private Point click = new Point(0, 0);
 
-            render.setFont(this.font);
+        @Override public void paint(final Graphics graphics) {
+            this.render = (Graphics2D)graphics;
+
+            final int width = this.getWidth();
+            final int height = this.getHeight();
+
+            this.render.setColor(Panel.background);
+            this.render.fillRect(0, 0, width, height);
 
             if(!NCli.this.ready) {
-                render.setColor(this.foreground);
-                render.drawString("Connecting", 8, 16);
+                this.render.setFont(Panel.fontBig);
+                this.render.setColor(Panel.foreground);
+                this.center("Press SPACE to connect", width / 2, height / 2);
                 return;
             }
 
-            render.setColor(this.foreground);
-            String[] lines = NCli.this.sim.status.split("\n");
-            for(int i = 0; i < lines.length; i++) this.center(render, lines[i], width / 2, 128 + 12 * i);
+            this.render.setFont(Panel.font);
+
+            this.render.setColor(Panel.foreground);
+            final String[] lines = NCli.this.sim.status.split("\n");
+            for(int i = 0; i < lines.length; i++) this.center(lines[i], width / 2, 128 + 12 * i);
 
             // Stats
 
-            this.trans(render, AffineTransform.getTranslateInstance(width / 2, 0), () -> {
-                render.setColor(this.frameBackground);
-                render.fill3DRect(-256, 16, 512, 16, false);
+            this.trans(AffineTransform.getTranslateInstance(width / 2, 0), () -> {
+                this.render.setColor(Panel.frameBackground);
+                this.render.fill3DRect(-256, 16, 512, 16, false);
 
-                render.setColor(this.yellow);
-                render.fillRect(-256 + 4, 16 + 4, (int)((512 - 8) * (NCli.this.sim.energy / 100)), 16 - 8);
+                this.render.setColor(Panel.yellow);
+                this.render.fillRect(-256 + 4, 16 + 4, (int)((512 - 8) * (NCli.this.sim.energy / 100)), 16 - 8);
 
-                this.center(render, "%.1f%%".formatted(NCli.this.sim.energy), 0, 64 - 16);
+                this.center("%.1f%%".formatted(NCli.this.sim.energy), 0, 64 - 16);
 
-                int net = (int)((-NCli.this.sim.consumedThisTick / Sim.TIME) + 4);
+                final int net = (int)((-NCli.this.sim.consumedThisTick / Sim.TIME) + 4);
 
                 if(net == 0) {
-                    render.setColor(this.yellow);
-                    this.center(render, "±0", 0, 64);
+                    this.render.setColor(Panel.yellow);
+                    this.center("±0", 0, 64);
                 } else if(net > 0) {
-                    render.setColor(this.green);
-                    this.center(render, "+%d".formatted(net), 0, 64);
-                    for(int i = 0; i < net; i++) render.fillRect(32 + 10 * i - 4, 64 - 2, 8, 8);
+                    this.render.setColor(Panel.green);
+                    this.center("+%d".formatted(net), 0, 64);
+                    for(int i = 0; i < net; i++) this.render.fillRect(32 + 10 * i - 4, 64 - 2, 8, 8);
                 } else {
-                    render.setColor(this.red);
-                    this.center(render, Integer.toString(net), 0, 64);
-                    for(int i = 0; i < -net; i++) render.drawRect(-32 - 10 * i - 4, 64 - 2, 8, 8);
+                    this.render.setColor(Panel.red);
+                    this.center(Integer.toString(net), 0, 64);
+                    for(int i = 0; i < -net; i++) this.render.drawRect(-32 - 10 * i - 4, 64 - 2, 8, 8);
                 }
             });
 
             // Commands
 
-            this.frame(render, width - 16 - 256 - 32, height - 16 - 256 - 32, 256 + 32, 256 + 32, (Integer w, Integer h) -> {
+            this.frame(width - 16 - 256 - 32, height - 16 - 256 - 32, 256 + 32, 256 + 32, (final Integer w, final Integer h) -> {
                 for(int i = 0; i < NCli.this.sim.commands.size(); i++) {
-                    Sim.SimCommand cmd = NCli.this.sim.commands.get(i);
-                    this.frame(render, 16, 16 + 64 * i, 256, 64, false, (Integer sw, Integer sh) -> {
-                        render.setColor(this.foreground);
+                    final Sim.SimCommand cmd = NCli.this.sim.commands.get(i);
+                    this.frame(16, 16 + 64 * i, 256, 64, false, (final Integer sw, final Integer sh) -> {
+                        this.render.setColor(Panel.foreground);
 
-                        if(cmd instanceof Sim.SimRotateCommand) {
-                            Sim.SimRotateCommand rcmd = (Sim.SimRotateCommand)cmd;
-                            render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
-                            render.setColor(this.shipIndicator);
-                            AffineTransform shipTransform = new AffineTransform();
-                            shipTransform.translate(sw / 2, sh / 2);
-                            shipTransform.scale(2, 2);
-                            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
-                            this.trans(render, shipTransform, () -> this.ship(render));
-                        } else if(cmd instanceof Sim.SimSteerCommand) {
-                            Sim.SimSteerCommand rcmd = (Sim.SimSteerCommand)cmd;
-                            render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
-                            render.setColor(this.shipIndicator);
-                            AffineTransform shipTransform = new AffineTransform();
-                            shipTransform.translate(sw / 2, sh / 2);
-                            shipTransform.scale(2, 2);
-                            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
-                            this.trans(render, shipTransform, () -> this.ship(render));
+                        if(cmd instanceof final Sim.SimRotateCommand rcmd) {
+                            this.render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
+                            this.render.setColor(Panel.shipIndicator);
+                            this.ship(false, sw / 2, sh / 2, 16);
+                        } else if(cmd instanceof final Sim.SimSteerCommand rcmd) {
+                            this.render.drawArc(sw / 2 - 16, sh / 2 - 16, 32, 32, (int)(NCli.this.sim.ang), (int)(rcmd.deg));
+                            this.render.setColor(Panel.shipIndicator);
+                            this.ship(false, sw / 2, sh / 2, 16);
                         }
 
-                        render.setColor(this.foreground);
-                        this.center(render, cmd.name(), sw / 2, 8);
+                        this.render.setColor(Panel.foreground);
+                        this.center(cmd.name(), sw / 2, 8);
 
                         if(cmd.blocking()) {
-                            render.setColor(this.red);
-                            this.center(render, " B", sw - 16, sh - 16);
+                            this.render.setColor(Panel.red);
+                            this.center(" B", sw - 16, sh - 16);
                         } else {
-                            render.setColor(this.green);
-                            this.center(render, "NB", sw - 16, sh - 16);
+                            this.render.setColor(Panel.green);
+                            this.center("NB", sw - 16, sh - 16);
                         }
 
                         int cost = (int)cmd.getOngoingEnergyCost();
                         if(cmd.initial) cost += (int)cmd.getInstantEnergyCost();
 
-                        render.setColor(this.red);
-                        this.center(render, Integer.toString(cost), 16, sh - 16);
-                        for(int j = 0; j < cost; j++) render.drawRect(32 + 10 * j - 4, sh - 16 - 2, 8, 8);
+                        this.render.setColor(Panel.red);
+                        this.center(Integer.toString(cost), 16, sh - 16);
+                        for(int j = 0; j < cost; j++) this.render.drawRect(32 + 10 * j - 4, sh - 16 - 2, 8, 8);
 
-                        render.setColor(this.green);
-                        this.center(render, "%.2f / %.2f".formatted(cmd.timeRemaining(), cmd.fullTime), sw / 2, sh - 16);
-                        render.fillRect(4, sh - 4 - 4, (int)((sw - 4 - 4) * (cmd.timeRemaining() / cmd.fullTime)), 2);
+                        this.render.setColor(Panel.green);
+                        this.center("%.2f / %.2f".formatted(cmd.timeRemaining(), cmd.fullTime), sw / 2, sh - 16);
+                        this.render.fillRect(4, sh - 4 - 4, (int)((sw - 4 - 4) * (cmd.timeRemaining() / cmd.fullTime)), 2);
                     });
                 }
             });
 
             // Map
 
-            final double aspect = (double)NCli.this.width / (double)NCli.this.height;
-            this.frame(render, 16, height - 16 - 256, (int)(256 * aspect), 256, (Integer w, Integer h) -> {
-                render.setColor(this.frameGrid);
-                render.drawLine(w / 2, 0, w / 2, h);
-                render.drawLine(0, h / 2, w, h / 2);
+            final double aspect = NCli.this.size.x / NCli.this.size.y;
+            if(aspect > 1) this.mapBounds.setBounds(16, height - 16 - 256, (int)(256 * aspect), 256);
+            else this.mapBounds.setBounds(16, height - 16 - 256, (int)(256 * aspect), 256);
+            this.frame(this.mapBounds, (final Integer w, final Integer h) -> {
+                this.render.setColor(Panel.frameGrid);
+                this.render.drawLine(w / 2, 0, w / 2, h);
+                this.render.drawLine(0, h / 2, w, h / 2);
 
-                render.setColor(this.foreground);
-                AffineTransform shipTransform = new AffineTransform();
-                shipTransform.translate(256 * aspect * (NCli.this.sim.pos.x / NCli.this.width), 256 * (NCli.this.sim.pos.y / NCli.this.height));
-                shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
-                this.trans(render, shipTransform, () -> this.ship(render));
+                this.render.setColor(Panel.foreground);
+                // this.ship(
+                //     true,
+                //     (int)this.mapToPx(NCli.this.sim.pos.x),
+                //     (int)this.mapToPx(NCli.this.sim.pos.y),
+                //     this.mapToPx(28)
+                // );
+
+                final AffineTransform trans = new AffineTransform();
+                trans.scale(this.mapBounds.width / NCli.this.size.x, this.mapBounds.height / NCli.this.size.y); // should be proportional but whatever
+                this.trans(trans, () -> {
+                    this.ship(
+                        true,
+                        (int)NCli.this.sim.pos.x,
+                        (int)NCli.this.sim.pos.y,
+                        28
+                    );
+
+                    NCli.this.ship.mapPaint(this.render);
+                });
+
+                NCli.this.ship.mapOverlayPaint(this.render);
+                // final AffineTransform shipTransform = new AffineTransform();
+                // shipTransform.translate(256 * aspect * (NCli.this.sim.pos.x / NCli.this.size.x), 256 * (NCli.this.sim.pos.y / NCli.this.size.y));
+                // shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
+                // this.trans(shipTransform, () -> this.ship());
             });
 
             // Indicator
 
-            this.indicator(render, 16, height - 16 - 256 - 16 - 256, 256, "Velocity: %.1f".formatted(NCli.this.sim.vel.length()), NCli.this.sim.vel, 100);
+            this.indicator(16, height - 16 - 256 - 16 - 256, 256, "Velocity: %.1f".formatted(NCli.this.sim.vel.length()), NCli.this.sim.vel, 100);
 
             // Ship
 
-            render.setColor(this.foreground);
+            this.render.setColor(Panel.foreground);
 
-            AffineTransform shipTransform = new AffineTransform();
-            shipTransform.translate(width / 2, height / 2);
-            shipTransform.scale(4, 4);
-            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
-            this.trans(render, shipTransform, () -> this.ship(render));
+            this.ship(false, width / 2, height / 2, 64);
+
+            this.render.drawRect((int)this.click.getX() - 1, (int)this.click.getY() - 1, 2, 2);
         }
 
-        private void indicator(Graphics2D render, int x, int y, int size, String label, Vec value, double max) {
-            this.frame(render, x, y, size, size, (w, h) -> {
-                render.setColor(this.frameGrid);
-                render.drawLine(w / 2, 0, w / 2, h);
-                render.drawLine(0, h / 2, w, h / 2);
+        private void indicator(final int x, final int y, final int size, final String label, final Vec value, final double max) {
+            this.frame(x, y, size, size, (w, h) -> {
+                this.render.setColor(Panel.frameGrid);
+                this.render.drawLine(w / 2, 0, w / 2, h);
+                this.render.drawLine(0, h / 2, w, h / 2);
 
-                render.setColor(this.foreground);
-                render.drawString(label, 4, 16);
+                this.render.setColor(Panel.foreground);
+                this.render.drawString(label, 4, 16);
 
-                render.setColor(this.shipIndicator);
-                AffineTransform shipTransform = new AffineTransform();
-                shipTransform.translate(size / 2, size / 2);
-                shipTransform.scale(2, 2);
-                shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
-                this.trans(render, shipTransform, () -> this.ship(render));
+                this.render.setColor(Panel.shipIndicator);
+                this.ship(false, size / 2, size / 2, this.mapToPx(max / 28));
 
-                render.setColor(this.foreground);
-                render.drawLine(size / 2, size / 2, size / 2 + (int)(value.x / max * size / 2), size / 2 + (int)(value.y / max * size / 2));
+                this.render.setColor(Panel.foreground);
+                this.render.drawLine(size / 2, size / 2, size / 2 + (int)(value.x / max * size / 2), size / 2 + (int)(value.y / max * size / 2));
             });
         }
 
-        private void frame(Graphics2D render, int x, int y, int width, int height, BiConsumer<Integer, Integer> frame) {
-            this.frame(render, x, y, width, height, true, frame);
+        private void frame(final Rectangle rect, final BiConsumer<Integer, Integer> frame) {
+            this.frame((int)rect.getX(), (int)rect.getY(), (int)rect.getWidth(), (int)rect.getHeight(), true, frame);
         }
 
-        private void frame(Graphics2D render, int x, int y, int width, int height, boolean raised, BiConsumer<Integer, Integer> frame) {
-            this.trans(render, AffineTransform.getTranslateInstance(x, y), () -> {
-                render.setColor(this.frameBackground);
-                render.fill3DRect(0, 0, width, height, raised);
+        private void frame(final int x, final int y, final int width, final int height, final BiConsumer<Integer, Integer> frame) {
+            this.frame(x, y, width, height, true, frame);
+        }
 
-                render.clipRect(0, 0, width, height);
+        private void frame(final int x, final int y, final int width, final int height, final boolean raised, final BiConsumer<Integer, Integer> frame) {
+            this.trans(AffineTransform.getTranslateInstance(x, y), () -> {
+                this.render.setColor(Panel.frameBackground);
+                this.render.fill3DRect(0, 0, width, height, raised);
+
+                this.render.clipRect(0, 0, width, height);
                 frame.accept(width, height);
-                render.setClip(null);
+                this.render.setClip(null);
             });
         }
 
-        private void ship(Graphics2D render) {
-            render.drawPolygon(this.tri);
+        private void ship(final boolean decorate, final int x, final int y, final double size) {
+            final AffineTransform shipTransform = new AffineTransform();
+            shipTransform.translate(x, y);
+            shipTransform.rotate(Math.toRadians(-NCli.this.sim.ang));
+            shipTransform.scale(size / 20, size / 20);
+            this.trans(shipTransform, () -> {
+                this.render.drawPolygon(Panel.tri);
+            });
         }
 
-        private void center(Graphics2D render, String text, int x, int y) {
-            FontMetrics metrics = render.getFontMetrics();
-            Rectangle2D bounds = metrics.getStringBounds(text, render);
-            render.drawString(text, (int)(x - bounds.getWidth() / 2), (int)(y - bounds.getHeight() / 2 + metrics.getAscent()));
+        private void center(final String text, final int x, final int y) {
+            final FontMetrics metrics = this.render.getFontMetrics();
+            final Rectangle2D bounds = metrics.getStringBounds(text, this.render);
+            this.render.drawString(text, (int)(x - bounds.getWidth() / 2), (int)(y - bounds.getHeight() / 2 + metrics.getAscent()));
         }
 
-        private void trans(Graphics2D render, AffineTransform trans, Runnable in) {
-            AffineTransform old = ((Graphics2D)render).getTransform();
-            render.transform(trans);
+        private void trans(final AffineTransform trans, final Runnable in) {
+            final AffineTransform old = this.render.getTransform();
+            this.render.transform(trans);
             in.run();
-            render.setTransform(old);
+            this.render.setTransform(old);
+        }
+
+        private double mapToPx(final double map) {
+            return map * (this.mapBounds.width / NCli.this.size.x);
+        }
+
+        private double pxToMap(final double map) {
+            return map * (NCli.this.size.x / this.mapBounds.width);
+        }
+
+        // Input
+
+        private boolean inputValid(final InputEvent evt) {
+            if(!NCli.this.ready) return false;
+            return (
+                evt instanceof MouseEvent
+                && this.mapBounds.contains(((MouseEvent)evt).getPoint())
+            );
+        }
+
+        @Override public void mouseWheelMoved(final MouseWheelEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mouseDragged(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mouseMoved(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mouseClicked(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mousePressed(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+
+            this.click = evt.getPoint();
+
+            System.out.println(new Vec(this.pxToMap(evt.getX() - this.mapBounds.x), this.pxToMap(evt.getY() - this.mapBounds.y)));
+        }
+        @Override public void mouseReleased(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mouseEntered(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+        @Override public void mouseExited(final MouseEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+
+        @Override public void keyTyped(final KeyEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) return;
+        }
+
+        @Override public void keyPressed(final KeyEvent evt) {
+            evt.consume();
+            if(!NCli.this.ready) {
+                if(evt.getKeyCode() == KeyEvent.VK_SPACE) NCli.this.start.fulfill(null);
+                return;
+            }
+        }
+
+        @Override public void keyReleased(final KeyEvent evt) {
+            evt.consume();
         }
     }
 
@@ -580,29 +692,31 @@ public class NCli {
         public double x;
         public double y;
 
-        public Vec(double x, double y) {
+        public Vec(final double x, final double y) {
             this.x = x;
             this.y = y;
         }
 
-        public Vec(double n) { this(n, n); }
+        public Vec(final double n) { this(n, n); }
 
-        public Vec(Point pt) { this(pt.getX(), pt.getY()); }
+        public Vec(final ihs.apcs.spacebattle.Point pt) { this(pt.getX(), pt.getY()); }
+        public Vec(final Point pt) { this(pt.getX(), pt.getY()); }
 
-        public static Vec polar(double angle, double magnitude) {
-            double radians = Math.toRadians(angle);
+        public static Vec polar(final double angle, final double magnitude) {
+            final double radians = Math.toRadians(angle);
 
             return new Vec(Math.cos(radians) * magnitude, Math.sin(radians) * -magnitude);
         }
 
-        public Point point() { return new Point(this.x, this.y); }
+        public ihs.apcs.spacebattle.Point point() { return new ihs.apcs.spacebattle.Point(this.x, this.y); }
 
-        public Vec add(Vec rhs) { return new Vec(this.x + rhs.x, this.y + rhs.y); }
-        public Vec sub(Vec rhs) { return new Vec(this.x - rhs.x, this.y - rhs.y); }
-        public Vec mul(Vec rhs) { return new Vec(this.x * rhs.x, this.y * rhs.y); }
-        public Vec scale(double rhs) { return new Vec(this.x * rhs, this.y * rhs); }
-        public Vec div(Vec rhs) { return new Vec(this.x / rhs.x, this.y / rhs.y); }
-        public Vec mod(Vec rhs) { return new Vec(((this.x % rhs.x) + rhs.x) % rhs.x, ((this.y % rhs.y) + rhs.y) % rhs.y); }
+        public Vec add(final Vec rhs) { return new Vec(this.x + rhs.x, this.y + rhs.y); }
+        public Vec sub(final Vec rhs) { return new Vec(this.x - rhs.x, this.y - rhs.y); }
+        public Vec mul(final Vec rhs) { return new Vec(this.x * rhs.x, this.y * rhs.y); }
+        public Vec scale(final double rhs) { return new Vec(this.x * rhs, this.y * rhs); }
+        public Vec div(final Vec rhs) { return new Vec(this.x / rhs.x, this.y / rhs.y); }
+        public Vec mod(final Vec rhs) { return new Vec(((this.x % rhs.x) + rhs.x) % rhs.x, ((this.y % rhs.y) + rhs.y) % rhs.y); }
+        public double dot(final Vec rhs) { return this.x * rhs.x + this.y * rhs.y; }
 
         public double length2() { return Math.pow(this.x, 2) + Math.pow(this.y, 2); }
         public double length() { return Math.sqrt(this.length2()); }
@@ -611,19 +725,20 @@ public class NCli {
             return this.div(new Vec(this.length()));
         }
 
-        public Vec withLength(double magnitude) { return this.normalize().scale(magnitude); }
+        public Vec withLength(final double magnitude) { return this.normalize().scale(magnitude); }
 
-        public double dist2(Vec rhs) { return Math.pow(this.x - rhs.x, 2) + Math.pow(this.y - rhs.y, 2); }
-        public double dist(Vec rhs) { return Math.sqrt(this.dist2(rhs)); }
+        public double dist2(final Vec rhs) { return Math.pow(this.x - rhs.x, 2) + Math.pow(this.y - rhs.y, 2); }
+        public double dist(final Vec rhs) { return Math.sqrt(this.dist2(rhs)); }
 
-        public Vec rotate(double angle) {
-            double radians = Math.toRadians(angle);
+        public Vec rotate(final double deg) {
+            final double radians = Math.toRadians(deg);
 
             return new Vec(
                 (Math.cos(radians) * this.x) - (Math.sin(radians) * this.y),
                 (Math.sin(radians) * this.x) + (Math.cos(radians) * this.y)
             );
         }
+        public Vec rotate(final Rotation angle) { return this.rotate(angle.deg); }
 
         public double angle() { return -Math.toDegrees(Math.atan2(this.y, this.x)); }
 
@@ -634,6 +749,29 @@ public class NCli {
         }
     }
 
+    public record Rotation(double deg) {
+        public Rotation(final double deg) { this.deg = Utils.normalizeAngle(deg); }
+        public Rotation() { this(0); }
+
+        public static Rotation deg(final double deg) { return new Rotation(deg); }
+        public static Rotation rad(final double rad) { return new Rotation(Math.toDegrees(rad)); }
+
+        public double deg() { return this.deg; }
+        public double rad() { return Math.toRadians(this.deg); }
+
+        public Rotation neg() { return new Rotation(-this.deg); }
+        public Rotation abs() { return new Rotation(Math.abs(this.deg)); }
+
+        public Rotation add(final Rotation rhs) { return new Rotation(this.deg + rhs.deg); }
+        public Rotation sub(final Rotation rhs) { return new Rotation(this.deg - rhs.deg); }
+        public Rotation mul(final Rotation rhs) { return new Rotation(this.deg * rhs.deg); }
+        public Rotation div(final Rotation rhs) { return new Rotation(this.deg / rhs.deg); }
+
+        @Override public String toString() {
+            return "%f⁰".formatted(this.deg);
+        }
+    }
+
     public static enum Direction {
         Forward,
         Back,
@@ -641,56 +779,56 @@ public class NCli {
         Right;
 
         public Vec vec() {
-            switch(this) {
-                case Forward: return new Vec(1, 0);
-                case Back: return new Vec(-1, 0);
-                case Left: return new Vec(0, -1);
-                case Right: return new Vec(0, 1);
-                default: return null; // unreachable
-            }
+            return switch (this) {
+                case Forward -> new Vec(1, 0);
+                case Back -> new Vec(-1, 0);
+                case Left -> new Vec(0, -1);
+                case Right -> new Vec(0, 1);
+                default -> null; // unreachable
+            };
         }
 
         public Direction flip() {
-            switch(this) {
-                case Forward: return Direction.Back;
-                case Back: return Direction.Forward;
-                case Left: return Direction.Right;
-                case Right: return Direction.Left;
-                default: return null; // unreachable
-            }
+            return switch (this) {
+                case Forward -> Direction.Back;
+                case Back -> Direction.Forward;
+                case Left -> Direction.Right;
+                case Right -> Direction.Left;
+                default -> null; // unreachable
+            };
         }
 
-        public Direction unsign(double sign) {
+        public Direction unsign(final double sign) {
             if(sign < 0) return this.flip();
             else return this;
         }
 
         public char thrust() {
-            switch(this) {
-                case Forward: return 'B';
-                case Back: return 'F';
-                case Left: return 'R';
-                case Right: return 'L';
-                default: return 0; // unreachable
-            }
+            return switch (this) {
+                case Forward -> 'B';
+                case Back -> 'F';
+                case Left -> 'R';
+                case Right -> 'L';
+                default -> 0; // unreachable
+            };
         }
 
-        public static Direction fromThrust(char ch) {
-            switch(ch) {
-                case 'B': return Direction.Forward;
-                case 'F': return Direction.Back;
-                case 'R': return Direction.Left;
-                case 'L': return Direction.Right;
-                default: return null; // unreachable
-            }
+        public static Direction fromThrust(final char ch) {
+            return switch (ch) {
+                case 'B' -> Direction.Forward;
+                case 'F' -> Direction.Back;
+                case 'R' -> Direction.Left;
+                case 'L' -> Direction.Right;
+                default -> null; // unreachable
+            };
         }
 
         public char torp() {
-            switch(this) {
-                case Forward: return 'F';
-                case Back: return 'B';
-                default: return 0; // invalid
-            }
+            return switch (this) {
+                case Forward -> 'F';
+                case Back -> 'B';
+                default -> throw new Error("invalid torpedo direction"); // invalid
+            };
         }
     }
 
@@ -700,6 +838,19 @@ public class NCli {
         NCli cli;
         final Async<ShipCommand> tx = new Async<>();
         final Async<BasicEnvironment> rx = new Async<>();
+        final boolean vPanelEnabled;
+
+        {
+            boolean en = true;
+            try {
+                this.getClass().getDeclaredMethod("vPanelPaint", this.getClass(), Graphics2D.class);
+            } catch(final NoSuchMethodException ex) {
+                en = false;
+            } catch(final Exception ex) {
+                throw new Error(ex);
+            }
+            this.vPanelEnabled = en;
+        }
 
         final void execute() {
             this.env = this.rx.await();
@@ -711,9 +862,10 @@ public class NCli {
         final void updateStatus() {
             this.ship = this.env.getShipStatus();
             this.pos = new Vec(this.ship.getPosition());
-            this.ang = Utils.normalizeAngle(this.ship.getOrientation());
+            this.ang = new Rotation(this.ship.getOrientation());
             this.speed = this.ship.getSpeed();
             this.vel = Vec.polar(this.ship.getMovementDirection(), this.speed);
+
             this.health = this.ship.getHealth();
             this.shield = this.ship.getShieldLevel();
             this.energy = this.ship.getEnergy();
@@ -721,27 +873,53 @@ public class NCli {
 
         // For the user to implement
 
-        protected RegistrationData init(int width, int height) {
+        protected RegistrationData init(final int width, final int height) {
             return new RegistrationData("Ship @" + Integer.toHexString((int)(Math.random() * 65535)), new Color(255, 255, 255, 255), 9);
         }
 
         protected abstract void run();
 
-        protected void destroyed(String by) {};
+        protected void destroyed(final String by) {}
+
+        protected void mouseWheelMoved(final MouseWheelEvent evt) {}
+        protected void mouseDragged(final MouseEvent evt) {}
+        protected void mouseMoved(final MouseEvent evt) {}
+        protected void mouseClicked(final MouseEvent evt) {}
+        protected void mousePressed(final MouseEvent evt) {}
+        protected void mouseReleased(final MouseEvent evt) {}
+        protected void mouseEntered(final MouseEvent evt) {}
+        protected void mouseExited(final MouseEvent evt) {}
+
+        // Overrides - Map
+
+        protected void mapPaint(final Graphics2D render) {}
+        protected void mapOverlayPaint(final Graphics2D render) {}
+
+        protected void mapClick(final int x, final int y) {}
+        protected void mapRightClick(final int x, final int y) {}
+        protected void mapMouseMove(final int x, final int y) {}
+
+        // Overrides - vPanel
+
+        protected void vPanelPaint(final Graphics2D render) {}
+
+        protected void vPanelClick(final int x, final int y) {}
+        protected void vPanelRightClick(final int x, final int y) {}
+        protected void vPanelMouseMove(final int x, final int y) {}
 
         // Utiltiies
 
         protected BasicEnvironment env;
         protected ObjectStatus ship;
         protected Vec pos = new Vec(0, 0);
-        protected int ang = 0;
+        protected Rotation ang = new Rotation();
         protected double speed = 0;
         protected Vec vel = new Vec(0, 0);
         protected double health = 0;
         protected double shield = 0;
         protected double energy = 0;
 
-        protected final void status(String status) {
+        protected final void status(final String status) {
             this.cli.sim.status = status;
         }
 
@@ -749,7 +927,7 @@ public class NCli {
          * Yields a command to the server
          * @param cmd The command to yield, will block if the command is blocking
          */
-        private final void yield(ShipCommand cmd) {
+        private final void yield(final ShipCommand cmd) {
             this.tx.fulfill(cmd);
             this.env = this.rx.await();
             this.updateStatus();
@@ -789,9 +967,10 @@ public class NCli {
          * @apiNote Equivalent to an L3 scan
          * @apiNote 0.1s duration
          */
-        protected final ObjectStatus radarTarget(int target) {
+        protected final ObjectStatus radarTarget(final int target) {
             this.yield(new RadarCommand(3, target));
-            return this.env.getRadar().get(0);
+            final RadarResults res = this.env.getRadar();
+            return res != null ? res.get(0) : null;
         }
 
         /**
@@ -826,9 +1005,9 @@ public class NCli {
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
          */
-        protected final void thrust(Direction dir, double dur, double power, boolean blocking) { this.thrustVectored(dir.vec(), dur, power, blocking); }
+        protected final void thrust(final Direction dir, final double dur, final double power, final boolean blocking) { this.thrustVectored(dir.vec(), dur, power, blocking); }
 
-        protected final void boost(Direction dir, double time, double power, int boosts, boolean blocking) {
+        protected final void boost(final Direction dir, final double time, final double power, final int boosts, final boolean blocking) {
             for(int i = 0; i < Math.min(Math.max(boosts, 0), 3); i++) this.thrustVectored(dir.vec(), time, power, false);
             this.thrustVectored(dir.vec(), time, power, blocking);
         }
@@ -839,11 +1018,11 @@ public class NCli {
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
          */
-        protected final void thrustVectored(Vec dir, double dur, double power, boolean blocking) {
+        protected final void thrustVectored(Vec dir, final double dur, final double power, final boolean blocking) {
             dir = dir.normalize();
 
-            double absx = Math.abs(dir.x);
-            double absy = Math.abs(dir.y);
+            final double absx = Math.abs(dir.x);
+            final double absy = Math.abs(dir.y);
 
             if(absx >= 0.1) this.yield(new ThrustCommand(Direction.Forward.unsign(dir.x).thrust(), dur, power * absx, blocking && absy < 0.1));
             if(absy >= 0.1) this.yield(new ThrustCommand(Direction.Right.unsign(dir.y).thrust(), dur, power * absy, blocking));
@@ -855,32 +1034,32 @@ public class NCli {
          * @param dur Time to accelerate for
          * @param power Power to accelerate with (0.1-1)
          */
-        protected final void thrustVectoredWorld(Vec dir, double dur, double power, boolean blocking) { this.thrustVectored(dir.rotate(this.ang), dur, power, blocking); }
+        protected final void thrustVectoredWorld(final Vec dir, final double dur, final double power, final boolean blocking) { this.thrustVectored(dir.rotate(this.ang), dur, power, blocking); }
 
-        protected final boolean rotate(int offset) {
-            if(offset == 0) return false;
-            this.yield(new RotateCommand(Utils.normalizeAngle(offset)));
+        protected final boolean rotate(final Rotation offset) {
+            if((int)offset.deg == 0) return false;
+            this.yield(new RotateCommand((int)offset.deg));
             return true;
         }
 
-        protected final boolean rotateTo(int angle) {
-            return this.rotate(Utils.normalizeAngle(angle - this.ang));
+        protected final boolean rotateTo(final Rotation angle) {
+            return this.rotate(angle.sub(this.ang));
         }
 
-        protected final boolean face(Vec target) {
-            return this.rotateTo((int)-Math.toDegrees(Math.atan2(target.y - this.pos.y, target.x - this.pos.x)));
+        protected final boolean face(final Vec target) {
+            return this.rotateTo(Utils.calculateAngleTo(this.pos, target));
         }
 
         protected final void brake() { this.brake(0); }
 
-        protected final void brake(double percent) { this.yield(new BrakeCommand(percent)); }
+        protected final void brake(final double percent) { this.yield(new BrakeCommand(percent)); }
 
-        protected final void glide(Vec target, double maxSpeed, boolean faceTarget, double thrustDuration, double timeout) {
-            Timeout tout = new Timeout(timeout);
+        protected final void glide(final Vec target, final double maxSpeed, final boolean faceTarget, final double thrustDuration, final double timeout) {
+            final Timeout tout = new Timeout(timeout);
 
             while(!tout.passed()) {
-                Vec dir = target.sub(this.pos);
-                double distance = dir.length();
+                final Vec dir = target.sub(this.pos);
+                final double distance = dir.length();
 
                 if(faceTarget) this.face(target);
 
@@ -898,12 +1077,12 @@ public class NCli {
             this.brake();
         }
 
-        protected final void glideBoost(Vec target, double maxSpeed, int boosts, double thrustDuration, double timeout) {
-            Timeout tout = new Timeout(timeout);
+        protected final void glideBoost(final Vec target, final double maxSpeed, final int boosts, final double thrustDuration, final double timeout) {
+            final Timeout tout = new Timeout(timeout);
 
             while(!tout.passed()) {
-                Vec dir = target.sub(this.pos);
-                double distance = dir.length();
+                final Vec dir = target.sub(this.pos);
+                final double distance = dir.length();
 
                 this.face(target);
 
@@ -919,18 +1098,24 @@ public class NCli {
             this.boost(Direction.Back, this.vel.length() / (Sim.ACCELERATION * 2), 1, boosts, true);
         }
 
-        protected final boolean steer(int offset, boolean blocking) {
+        protected final boolean steer(final int offset, final boolean blocking) {
             if(offset == 0) return false;
             this.yield(new SteerCommand(offset, blocking));
             return true;
         }
 
-        protected final boolean steerTo(int angle, boolean blocking) {
+        protected final boolean steerTo(final int angle, final boolean blocking) {
             return this.steer(Utils.normalizeAngle(angle - (int)this.vel.angle()), blocking);
         }
 
-        protected final boolean steerToFace(Vec target, boolean blocking) {
+        protected final boolean steerToFace(final Vec target, final boolean blocking) {
             return this.steerTo((int)-Math.toDegrees(Math.atan2(target.y - this.pos.y, target.x - this.pos.x)), blocking);
+        }
+
+        // Torpedo
+
+        protected final void fire(final Direction dir) {
+            this.yield(new FireTorpedoCommand(dir.torp()));
         }
 
         // Misc
@@ -944,72 +1129,137 @@ public class NCli {
             }
         }
 
-        protected final void idle(double time) { this.yield(new IdleCommand(time)); }
+        protected final void idle(final double time) { this.yield(new IdleCommand(time)); }
 
-        protected final void until(Supplier<Boolean> condition, double interval, double timeout) {
-            Timeout tout = new Timeout(timeout);
+        protected final void until(final Supplier<Boolean> condition, final double interval, final double timeout) {
+            final Timeout tout = new Timeout(timeout);
             while(!(condition.get() || tout.passed())) this.idle(interval);
         }
 
-        protected final <T> void untilChange(Supplier<T> value, double interval, double timeout) {
-            T initial = value.get();
+        protected final <T> void untilChange(final Supplier<T> value, final double interval, final double timeout) {
+            final T initial = value.get();
             this.until(() -> !value.get().equals(initial), interval, timeout);
         }
 
-        protected final <T> void untilSufficientEnergy(double energy) {
+        protected final <T> void untilSufficientEnergy(final double energy) {
             this.until(() -> this.energy >= energy, 0.1, 0);
         }
     }
 
+    public final class RadarSystem {
+        public record Celestial(
+            Vec position,
+            Vec size,
+            double influenceRadius,
+            double influence
+        ) {
+        }
+
+        private final ArrayList<ObjectStatus> celestials = new ArrayList<ObjectStatus>();
+        private final ArrayList<Vec> pingOrigins = new ArrayList<>();
+
+        final void radar(final RadarResults res, final int level) {
+            for(final ObjectStatus object : res) {
+                // todo: this
+            }
+        }
+    }
+
     public static final class Utils {
+        public static final double remap(final double value, final double fromMin, final double fromMax, final double toMin, final double toMax) {
+            return toMin + (value - fromMin) * (toMax - toMin) / (fromMax - fromMin);
+        }
+
         public static final int normalizeAngle(int angle) {
             angle = ((angle % 360) + 360) % 360;
             if(angle > 180) angle -= 360;
             return angle;
         }
+
         public static final double normalizeAngle(double angle) {
             angle = ((angle % 360) + 360) % 360;
             if(angle > 180) angle -= 360;
             return angle;
         }
 
-        public static final double calculateDecelerationDistance(double velocity) {
+        public static final Rotation calculateAngleTo(final Vec src, final Vec dst) {
+            return Rotation.rad(-Math.atan2(dst.y - src.y, dst.x - src.x));
+        }
+
+        public static final double calculateDecelerationDistance(final double velocity) {
             return Utils.calculateDecelerationDistance(velocity, Sim.ACCELERATION);
         }
 
-        public static final double calculateDecelerationDistance(double velocity, double acceleration) {
+        public static final double calculateDecelerationDistance(final double velocity, final double acceleration) {
             return (velocity * velocity) / (2 * acceleration);
+        }
+
+        public static final Vec calculateInterceptPosition(
+            final Vec pos,
+            final Vec vel,
+            final Vec targetPos,
+            final Vec targetVel,
+            final double projSpeed
+        ) {
+            // todo: figure out how to handle self velocity being nonzero
+            //assert vel.length() < 1;
+
+            // inputs
+            final Vec P1 = pos;
+            final Vec P2 = targetPos;
+            final Vec vc = targetVel;
+            final double vp = projSpeed;
+
+            // calculations
+            final Vec c0 = P2.sub(P1);
+
+            final double a0 = c0.normalize().dot(vc);
+            final double b = Math.sqrt(Math.pow(c0.length(), 2) - Math.pow(a0, 2));
+
+            final double qa = vc.length2() - Math.pow(vp, 2);
+            final double qb = 2 * a0 * vc.length();
+            final double qc = Math.pow(a0, 2) + Math.pow(b, 2);
+            final double th = (-qb + Math.sqrt(Math.pow(qb, 2) - 4 * qa * qc)) / (2 * qa);
+
+            //System.out.printf("---\nc0=%s\nvc=%s\na0=%f\nb=%f\nqa=%f\nqb=%f\nqc=%f\nth=%f\nP3=%s\n", c0, vc, a0, b, qa, qb, qc, th, P2.add(vc.scale(th)));
+
+            return P2.add(vc.scale(-th * 1.5));
         }
     }
 
     // NCli
 
-    private int width;
-    private int height;
+    private Vec size;
 
     private boolean ready = false;
+    private final Async<Void> start = new Async<>();
 
-    private final Map<Integer, ObjectStatus> celestials = new HashMap<>();
-    private final ArrayList<Vec> pings = new ArrayList<>();
     private final ShipComputer ship;
     private final Thread coroutine;
     private final Sim sim;
     private final JFrame frame = new JFrame("NCli");
-    private final JPanel canvas = new Panel();
+    private final Panel canvas = new Panel();
 
-    public NCli(String ip, ShipComputer ship) {
+    public NCli(final String ip, final ShipComputer ship) {
         ship.cli = this;
 
-        this.canvas.setSize(1000, 750);
+        this.canvas.setSize(1250, 750);
+        this.canvas.addMouseListener(this.canvas);
+        this.canvas.addMouseMotionListener(this.canvas);
+        this.canvas.addMouseWheelListener(this.canvas);
 
         this.frame.add(this.canvas);
+        this.frame.addKeyListener(this.canvas);
         this.frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.frame.setVisible(true);
-        this.frame.setSize(1000, 750);
+        this.frame.getContentPane().setPreferredSize(new Dimension(1250, 750));
+        this.frame.getContentPane().setMinimumSize(new Dimension(1250, 750));
+        this.frame.getContentPane().setMaximumSize(new Dimension(1250, 750));
+        this.frame.pack();
         this.frame.setResizable(false);
         try {
             this.frame.setIconImage(ImageIO.read(new File("icon.png")));
-        } catch(IOException e) {
+        } catch(final IOException e) {
             e.printStackTrace();
         }
 
@@ -1017,30 +1267,29 @@ public class NCli {
 
         this.coroutine = new Thread(ship::execute, "NCli:Coroutine");
         this.coroutine.setDaemon(true);
-        this.coroutine.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            @Override public void uncaughtException(Thread thread, Throwable exception) {
-                System.err.println("NCli:Coroutine Thread: uncaught exception:");
-                exception.printStackTrace();
-            }
+        this.coroutine.setUncaughtExceptionHandler((thread, exception) -> {
+            System.err.println("NCli:Coroutine Thread: uncaught exception:");
+            exception.printStackTrace();
         });
         this.coroutine.start();
 
         this.sim = new Sim();
 
+        this.start.await();
+
         TextClient.run(ip, new BasicSpaceship() {
-            @Override public RegistrationData registerShip(int numImages, int width, int height) {
-                NCli.this.width = width;
-                NCli.this.height = height;
+            @Override public RegistrationData registerShip(final int numImages, final int width, final int height) {
+                NCli.this.size = new Vec(width, height);
 
                 return ship.init(width, height);
             }
 
-            @Override public ShipCommand getNextCommand(BasicEnvironment env) {
+            @Override public ShipCommand getNextCommand(final BasicEnvironment env) {
                 synchronized(NCli.this.sim) {
                     NCli.this.sim.unblock();
 
                     ship.rx.fulfill(env);
-                    ShipCommand cmd = ship.tx.await();
+                    final ShipCommand cmd = ship.tx.await();
 
                     NCli.this.sim.cmd(cmd);
                     NCli.this.sim.update(env);
@@ -1050,7 +1299,7 @@ public class NCli {
                 }
             }
 
-            @Override public void shipDestroyed(String by) {
+            @Override public void shipDestroyed(final String by) {
                 ship.destroyed(by);
             }
         });

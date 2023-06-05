@@ -5,7 +5,7 @@ import lib.NCli;
 
 public class FindTheMiddle extends NCli.ShipComputer {
     public static void main(String[] args) throws Exception {
-        new NCli("10.56.152.183", new FindTheMiddle());
+        new NCli("172.30.226.161", new FindTheMiddle());
     }
 
     private NCli.Vec center;
