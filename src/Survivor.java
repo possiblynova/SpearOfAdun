@@ -1,14 +1,15 @@
 import java.awt.Color;
 import java.awt.Graphics2D;
 import ihs.apcs.spacebattle.RegistrationData;
+import ihs.apcs.spacebattle.commands.RepairCommand;
 import lib.*;
 import lib.NCli.*;
 import lib.NCli.ShipComputer.RadarSystem.*;
 
 public class Survivor extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
-        new NCli("localhost", new Survivor()); // local
-        //new NCli("10.56.156.234", new Survivor()); // class
+        //new NCli("localhost", new Survivor()); // local
+        new NCli("10.56.156.234", new Survivor()); // class
     }
 
     private Vec target;
@@ -41,11 +42,11 @@ public class Survivor extends NCli.ShipComputer {
             final Set scan = this.radar.scanExtended();
 
             if(scan != null) {
-                for(final Unit unit : scan.filter(Set.celestials).units.values()) {
-                    if(unit.influence.stale()) unit.scan();
+                for(final Unit unit : scan.filter(Set.celestials.or(unit -> unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid)).units.values()) {
+                    if(unit.influence.stale() && !unit.scan()) continue;
 
                     this.avoid = unit.pos.as();
-                    this.rad = unit.influence.as().greater();
+                    this.rad = Math.max(unit.influence.as().greater(), unit.radius.as());
                     this.cur = this.vel.angle(); // current trajectory
                     this.straight = this.pos.angleTo(unit.pos.as()); // straight path to the body
                     this.angle = Utils.calculateAvoidAngle(this.pos.dist(unit.pos.as()), unit.influence.as().greater() + 28); // angle required to avoid
@@ -57,31 +58,35 @@ public class Survivor extends NCli.ShipComputer {
                         continue $;
                     }
                 }
+            }
 
-                this.steer = null;
+            this.steer = null;
 
-                if(this.energy < 50) continue $;
+            if(this.health < 100 && this.energy > 75) {
+                this.yield(new RepairCommand(Math.min((int)(100 - this.health), Math.max(((int)this.energy - 30) / 2, 0))));
+            }
 
-                if(target == null || !target.scan()) {
-                    final Set targets = scan.filter(unit -> (unit.kind == UnitKind.Asteroid || unit.kind == UnitKind.Ship));
-                    if(targets.units.size() > 0) {
-                        this.status("TARGET");
-                        target = targets.units.values().iterator().next();
-                        target.scan();
-                    } else continue $;
-                }
+            if(this.energy < 50) continue $;
 
-                this.target = target.pos.as();
-                this.targetVel = target.vel.as();
-                this.intercept = Utils.calculateInterceptPosition(this.pos, this.ang, this.vel, this.target, this.targetVel, NCli.Sim.TORPEDO_SPEED);
+            if(target == null || !target.scan()) {
+                final Set targets = scan.filter(unit -> (unit.kind == UnitKind.Asteroid || unit.kind == UnitKind.Ship));
+                if(targets.units.size() > 0) {
+                    this.status("TARGET");
+                    target = targets.units.values().iterator().next();
+                    if(!target.scan()) continue $;
+                } else continue $;
+            }
 
-                if(Utils.calculateAngleTo(this.pos, this.intercept).sub(this.ang).abs().deg() <= 4) {
-                    this.status("FIRING");
-                    this.fire(Direction.Forward);
-                } else {
-                    this.status("LOCKING");
-                    this.face(this.intercept);
-                }
+            this.target = target.pos.as();
+            this.targetVel = target.vel.as();
+            this.intercept = Utils.calculateInterceptPosition(this.pos, this.ang, this.vel, this.target, this.targetVel, NCli.Sim.TORPEDO_SPEED);
+
+            if(Utils.calculateAngleTo(this.pos, this.intercept).sub(this.ang).abs().deg() <= 4) {
+                this.status("FIRING");
+                this.fire(Direction.Forward);
+            } else {
+                this.status("LOCKING");
+                this.face(this.intercept);
             }
         }
     }
@@ -108,18 +113,5 @@ public class Survivor extends NCli.ShipComputer {
         final Vec steer = Vec.polar(this.steer.deg(), 1000);
         render.setColor(Color.cyan);
         render.drawLine((int)this.pos.x, (int)this.pos.y, (int)this.pos.x + (int)steer.x, (int)this.pos.y + (int)steer.y);
-
-        /*
-        if(this.target == null && this.intercept == null) return;
-
-        render.setColor(Color.WHITE);
-        render.fillOval((int)this.target.x - 2, (int)this.target.y - 2, 4, 4);
-
-        render.setColor(Color.RED);
-        render.drawLine((int)this.target.x, (int)this.target.y, (int)this.target.x + (int)this.targetVel.x, (int)this.target.y + (int)this.targetVel.y);
-
-        render.setColor(Color.GREEN);
-        render.drawOval((int)this.intercept.x - 2, (int)this.intercept.y - 2, 4, 4);
-        */
     }
 }

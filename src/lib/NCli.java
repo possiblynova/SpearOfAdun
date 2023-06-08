@@ -141,6 +141,8 @@ public class NCli {
         public T with(final Duration ttl) { return !this.stale(ttl) ? this.value : null; }
         public T as() { return this.with(this.ttl); }
         public T unchecked() { return this.value; }
+
+        public T or(Exp<T> other) { return this.fresh() ? this.as() : other.as(); }
     }
 
     /**
@@ -1456,7 +1458,7 @@ public class NCli {
          * Yields a command to the server
          * @param cmd The command to yield, will block if the command is blocking
          */
-        private final void yield(final ShipCommand cmd) {
+        protected final void yield(final ShipCommand cmd) {
             this.tx.fulfill(cmd);
             this.env = this.rx.await();
             this.updateStatus();
