@@ -45,8 +45,6 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
     }
 
     @Override protected void run() {
-        this.control.face(this.unwrap(new Vec(this.env.getGameInfo().getObjectiveLocation())));
-
         $: while(true) {
             this.gold = this.unwrap(new Vec(this.env.getGameInfo().getObjectiveLocation()));
 
@@ -54,7 +52,7 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
 
             final Set scan = this.radar.scanExtended();
 
-            if(scan != null) {
+            if(this.vel.mag() > 2 && scan != null) {
                 for(final Unit unit : scan.filter(Set.celestials.or(unit -> unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid)).units.values()) {
                     this.avoid = this.avoidance.avoid(unit);
                     if(this.avoid != null) {
@@ -74,21 +72,23 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
 
             if(this.vel.mag() < 50) {
                 this.status("ATTAIN");
+                this.control.face(this.gold);
                 this.control.boost(Direction.Forward, 0.5, 1, 3, true);
+                this.control.steerToFace(this.gold, false);
                 continue $;
             }
 
             if(this.timeout != null && !this.timeout.passed()) continue $;
             else if(this.timeout != null) this.timeout = null;
 
-            if(this.pos.dist(gold) < 100) {
+            if(this.pos.dist(this.gold) < 100) {
                 this.status("STEER TO GOLD BAUBLE");
-                this.control.steerToFace(gold, false);
-                if(this.vel.angle().dist(this.pos.angleTo(pos)).deg() < 45) this.timeout = new Timeout(Duration.ofSeconds(5));
+                this.control.steerToFace(this.gold, false);
+                if(this.vel.angle().dist(this.pos.angleTo(this.gold)).deg() < 45) this.timeout = new Timeout(Duration.ofSeconds(5));
                 continue $;
             }
 
-            if(bauble == null || !this.attainable(bauble.pos.as()) || !bauble.scan()) {
+            if(this.bauble == null || !this.attainable(this.bauble.pos.as()) || !this.bauble.scan()) {
                 this.status("LOCATE BAUBLE");
 
                 final Set potential = this.radar.scanFull().filter(
@@ -104,22 +104,22 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
                 targets.sort((a, b) -> Double.compare(this.unwrap(a.pos.as()).dist2(this.pos), this.unwrap(b.pos.as()).dist2(this.pos)));
 
                 if(targets.size() > 0) {
-                    bauble = targets.get(0);
+                    this.bauble = targets.get(0);
 
                     this.status("STEER TO LOCAL BAUBLE");
-                    this.control.steerToFace(this.unwrap(bauble.pos.as()), false);
+                    this.control.steerToFace(this.unwrap(this.bauble.pos.as()), false);
                 } else {
-                    bauble = null;
+                    this.bauble = null;
 
-                    this.control.steerToFace(gold, false);
+                    this.control.steerToFace(this.gold, false);
                 }
             } else {
                 this.status("STEER TO LOCAL BAUBLE");
-                this.control.steerToFace(this.unwrap(bauble.pos.as()), false);
+                this.control.steerToFace(this.unwrap(this.bauble.pos.as()), false);
             }
 
-            if(target == null || !target.scan()) {
-                final Set targets = scan.filter(unit -> (unit.kind == UnitKind.Asteroid || unit.kind == UnitKind.Ship));
+            if(this.target == null || !this.target.scan()) {
+                final Set targets = scan.filter(unit -> unit.kind == UnitKind.Ship);
 
                 this.status("TARGET");
 
@@ -128,14 +128,14 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
                 while(true) {
                     if(!iter.hasNext()) continue $;
 
-                    target = iter.next();
+                    this.target = iter.next();
 
-                    if(target.scan()) break;
+                    if(this.target.scan()) break;
                 }
             }
 
-            Vec targetPos = target.pos.as();
-            Vec targetVel = target.vel.as();
+            Vec targetPos = this.target.pos.as();
+            Vec targetVel = this.target.vel.as();
             Vec intercept = Utils.calculateInterceptPosition(this.pos, this.ang, this.vel, targetPos, targetVel, NCli.Sim.TORPEDO_SPEED);
 
             if(this.pos.angleTo(intercept).dist(this.ang).abs().deg() <= 4) {
