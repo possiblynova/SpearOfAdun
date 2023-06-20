@@ -6,7 +6,8 @@ import lib.NCli;
 
 public class FindTheMiddle extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
-        new NCli("172.30.226.161", new FindTheMiddle());
+        if(System.getenv("COMPUTERNAME") == "PRECURSOR") new NCli("localhost", new Survivor()); // local
+        else new NCli("10.56.156.234", new Survivor()); // class
     }
 
     private NCli.Vec center;
@@ -23,15 +24,15 @@ public class FindTheMiddle extends NCli.ShipComputer {
     @Override protected void run() {
         while(true) {
             final long start = System.currentTimeMillis();
-            //this.glideBoost(this.center, 100, 3, 0.25, 30); // 22.25 avg
-            //this.glideBoost(this.center, 100, 2, 0.1, 30); // 20 avg
-            //this.glide(this.center, 100, false, 0.1, 30); // 19.5 avg
-            this.glideBoost(this.center, 100, 1, 0.25, Duration.ofSeconds(30)); // 19.5 avg
-            //this.glideBoost(this.center, 100, 2, 0.35, 30); // 18.75 avg (overshoots but still gets the point the majority of times)
-            //this.glideBoost(this.center, 100, 2, 0.25, 30); // 21.1 avg
+            //this.control.glideBoost(this.center, 100, 3, 0.25, 30); // 22.25 avg
+            //this.control.glideBoost(this.center, 100, 2, 0.1, 30); // 20 avg
+            //this.control.glide(this.center, 100, false, 0.1, 30); // 19.5 avg
+            this.control.glideBoost(this.center, 100, 1, 0.25, Duration.ofSeconds(30)); // 19.5 avg
+            //this.control.glideBoost(this.center, 100, 2, 0.35, 30); // 18.75 avg (overshoots but still gets the point the majority of times)
+            //this.control.glideBoost(this.center, 100, 2, 0.25, 30); // 21.1 avg
             this.totalInner += System.currentTimeMillis() - start;
-            this.untilChange(() -> this.env.getGameInfo().getScore(), 0.1, Duration.ofSeconds(3));
-            this.untilSufficientEnergy(100);
+            this.control.untilChange(() -> this.env.getGameInfo().getScore(), 0.1, Duration.ofSeconds(3));
+            this.control.untilSufficientEnergy(100);
             this.total += System.currentTimeMillis() - start;
             this.cycles++;
 
