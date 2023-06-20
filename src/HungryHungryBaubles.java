@@ -24,7 +24,7 @@ Survivor but when free:
 public class HungryHungryBaubles extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
         if("PRECURSOR".equals(System.getenv("COMPUTERNAME"))) new NCli("localhost", new HungryHungryBaubles()); // local
-        else new NCli("10.56.156.234", new HungryHungryBaubles()); // class
+        else new NCli("10.56.155.188", new HungryHungryBaubles()); // class
     }
 
     private AvoidanceSystem.Report avoid;
@@ -54,9 +54,9 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
 
             final Set scan = this.radar.scanExtended();
 
-            if(scan != null) {
+            if(scan != null && this.vel.mag() > 2) {
                 for(final Unit unit : scan.filter(Set.celestials.or(unit -> unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid)).units.values()) {
-                    this.avoid = this.avoidance.avoid(unit);
+                    this.avoid = this.avoidance.avoid(unit, unit.kind == UnitKind.Asteroid ? 25 : 5);
                     if(this.avoid != null) {
                         this.status("AVOID");
                         this.avoid.execute(true);

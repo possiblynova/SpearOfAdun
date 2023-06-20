@@ -1606,7 +1606,7 @@ public class NCli {
 
             private final ShipComputer ship = ShipComputer.this;
 
-            public Report avoid(final Unit unit) {
+            public Report avoid(final Unit unit, final double additionalRadius) {
                 if(unit.radius.stale() && !unit.scan()) return null;
 
                 final Report rep = new Report();
@@ -1616,7 +1616,7 @@ public class NCli {
                 rep.collision = Math.max(unit.influence.as().greater(), unit.radius.as());
                 rep.trajectory = this.ship.vel.angle(); // current trajectory
                 rep.straight = this.ship.pos.angleTo(rep.pos); // straight path to the body
-                rep.angle = Utils.calculateAvoidAngle(this.ship.pos.dist(rep.pos), rep.collision + Sim.SHIP_RADIUS); // angle required to avoid
+                rep.angle = Utils.calculateAvoidAngle(this.ship.pos.dist(rep.pos), rep.collision + Sim.SHIP_RADIUS + additionalRadius); // angle required to avoid
 
                 if(Double.isNaN(rep.angle.deg())) rep.escape = true;
                 else if(rep.trajectory.cmp(rep.straight, rep.angle)) {
