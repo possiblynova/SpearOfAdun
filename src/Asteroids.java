@@ -6,10 +6,10 @@ import lib.*;
 import lib.NCli.*;
 import lib.NCli.ShipComputer.RadarSystem.*;
 
-public class Survivor extends NCli.ShipComputer {
+public class Asteroids extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
-        if("PRECURSOR".equals(System.getenv("COMPUTERNAME"))) new NCli("localhost", new Survivor()); // local
-        else new NCli("10.56.98.229", new Survivor()); // class
+        if("PRECURSOR".equals(System.getenv("COMPUTERNAME"))) new NCli("localhost", new Asteroids()); // local
+        else new NCli("10.56.98.229", new Asteroids()); // class
     }
 
     private Vec target;
@@ -26,33 +26,22 @@ public class Survivor extends NCli.ShipComputer {
         Unit target = null;
 
         $: while(true) {
-            this.status("SCAN");
+            this.status("CHECK");
 
-            final Set scan = this.radar.scanExtended();
-
-            if(scan != null) {
-                for(final Unit unit : scan.filter(Set.celestials.or(unit -> unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid)).units.values()) {
-                    this.avoid = this.avoidance.avoid(unit, 5);
-                    if(this.avoid != null) {
-                        this.avoid.execute(true);
-                        this.avoid = null;
-                        continue $;
-                    }
-                }
-            }
-
-            if(this.vel.mag() < 15) {
-                this.status("ATTAIN");
-                this.control.thrust(Direction.Forward, 0.5, 1, true);
-                continue $;
-            }
-
-            if(this.health < 100 && this.energy > 75) {
+            if(this.health < 100 && this.energy > 50) {
                 this.control.yield(new RepairCommand(Math.min(100 - (int)this.health, 5)));
                 continue $;
             }
 
+            if(this.vel.mag() > 3) this.control.brake();
+
             if(this.energy < 50) continue $;
+
+            this.status("SCAN");
+
+            final Set scan = this.radar.scanExtended();
+
+            if(scan == null) continue;
 
             if(target == null || !target.scan()) {
                 final Set targets = scan.filter(unit -> (unit.kind == UnitKind.Asteroid || unit.kind == UnitKind.Ship));
@@ -75,9 +64,5 @@ public class Survivor extends NCli.ShipComputer {
                 this.control.face(this.intercept);
             }
         }
-    }
-
-    @Override public void mapPaint(final Graphics2D render) {
-        if(this.avoid != null) this.avoid.paint(render);
     }
 }

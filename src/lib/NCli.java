@@ -1304,18 +1304,18 @@ public class NCli {
                 public boolean remember = true;
                 public boolean persistents = true;
 
-                public Duration nearby = Duration.ofMillis(2000);
+                public Duration nearby = Duration.ofMillis(1000);
 
                 public Duration pos = Duration.ofMillis(500);
                 public Duration ang = Duration.ofMillis(1000);
                 public Duration vel = Duration.ofMillis(1000);
 
-                public Duration health = Duration.ofMillis(5000);
-                public Duration shields = Duration.ofMillis(5000);
+                public Duration health = Duration.ofMillis(1000);
+                public Duration shields = Duration.ofMillis(3000);
                 public Duration energy = Duration.ofMillis(1000);
 
-                public Duration pointValue = Duration.ofMillis(5000);
-                public Duration stored = Duration.ofMillis(5000);
+                public Duration pointValue = Duration.ofMillis(3000);
+                public Duration stored = Duration.ofMillis(3000);
 
                 public Duration radius = Exp.persist;
                 public Duration influence = Exp.persist;
@@ -1607,7 +1607,7 @@ public class NCli {
             private final ShipComputer ship = ShipComputer.this;
 
             public Report avoid(final Unit unit, final double additionalRadius) {
-                if(unit.radius.stale() && !unit.scan()) return null;
+                if((unit.pos.stale() || unit.radius.stale() || unit.influence.stale()) && !unit.scan()) return null;
 
                 final Report rep = new Report();
 
@@ -1719,7 +1719,7 @@ public class NCli {
              */
             public final void thrustVectoredWorld(final Vec dir, final double dur, final double power, final boolean blocking) { this.thrustVectored(dir.rot(this.ship.ang.neg()), dur, power, blocking); }
 
-            public final void brake() { this.brake(0); }
+            public final void brake() { this.brake(0.05); }
 
             public final void brake(final double percent) { this.yield(new BrakeCommand(percent)); }
 
@@ -1736,7 +1736,7 @@ public class NCli {
             }
 
             public final void face(final Vec target) {
-                while(this.rotateTo(this.ship.pos.angleTo(target)));
+                while(this.rotateTo(this.ship.pos.angleTo(this.ship.unwrap(target))));
             }
 
             public final boolean steer(final Rot offset, final boolean blocking) {
@@ -1750,7 +1750,7 @@ public class NCli {
             }
 
             public final void steerToFace(final Vec target, final boolean ensure) {
-                while(this.steerTo(this.ship.pos.angleTo(target), true) && ensure);
+                while(this.steerTo(this.ship.pos.angleTo(this.ship.unwrap(target)), true) && ensure);
             }
 
             // Movement - Subroutines

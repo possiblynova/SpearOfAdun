@@ -3,7 +3,9 @@ import java.awt.Graphics2D;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Predicate;
 
+import ihs.apcs.spacebattle.Point;
 import ihs.apcs.spacebattle.RegistrationData;
 import ihs.apcs.spacebattle.commands.RepairCommand;
 import lib.*;
@@ -24,7 +26,7 @@ Survivor but when free:
 public class HungryHungryBaubles extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
         if("PRECURSOR".equals(System.getenv("COMPUTERNAME"))) new NCli("localhost", new HungryHungryBaubles()); // local
-        else new NCli("10.56.155.188", new HungryHungryBaubles()); // class
+        else new NCli("10.56.98.229", new HungryHungryBaubles()); // class
     }
 
     private AvoidanceSystem.Report avoid;
@@ -35,7 +37,11 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
 
     private Timeout timeout;
 
+    private Predicate<Unit> avoidFilter = unit -> unit.kind == UnitKind.Planet || unit.kind == UnitKind.SpaceMine || unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid;
+
     private boolean attainable(Vec pos) {
+        if(this.gold == null) return true;
+
         return this.pos.angleTo(gold).dist(this.pos.angleTo(pos)).deg() < 45 // limit to 45deg off objective path
             && this.vel.angle().dist(this.pos.angleTo(pos)).deg() < 60; // limit to 60deg off current vel
     }
@@ -46,15 +52,18 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
 
     @Override protected void run() {
         $: while(true) {
-            this.gold = this.unwrap(new Vec(this.env.getGameInfo().getObjectiveLocation()));
+            Point goldPoint = this.env.getGameInfo().getObjectiveLocation();
+            if(goldPoint != null) this.gold = this.unwrap(new Vec(goldPoint));
+            else this.gold = null;
 
             this.status("SCAN");
 
             final Set scan = this.radar.scanExtended();
 
             if(this.vel.mag() > 2 && scan != null) {
-                for(final Unit unit : scan.filter(Set.celestials.or(unit -> unit.kind == UnitKind.Torpedo || unit.kind == UnitKind.Ship || unit.kind == UnitKind.Asteroid)).units.values()) {
-                    this.avoid = this.avoidance.avoid(unit, unit.kind == UnitKind.Asteroid ? 25 : 5);
+                for(final Unit unit : this.radar.mem.filter(this.avoidFilter).units.values()) {
+                    this.status("avoid " + unit.kind.toString() + unit.id);
+                    this.avoid = this.avoidance.avoid(unit, 5);
                     if(this.avoid != null) {
                         this.status("AVOID");
                         this.avoid.execute(true);
@@ -70,18 +79,18 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
                 continue $;
             }
 
-            if(this.vel.mag() < 50) {
+            if(this.vel.mag() < 90) {
                 this.status("ATTAIN");
-                this.control.face(this.gold);
+                if(this.gold != null) this.control.face(this.gold);
                 this.control.boost(Direction.Forward, 0.5, 1, 3, true);
-                this.control.steerToFace(this.gold, false);
+                if(this.gold != null) this.control.steerToFace(this.gold, false);
                 continue $;
             }
 
             if(this.timeout != null && !this.timeout.passed()) continue $;
             else if(this.timeout != null) this.timeout = null;
 
-            if(this.pos.dist(this.gold) < 100) {
+            if(this.gold != null && this.pos.dist(this.gold) < 100) {
                 this.status("STEER TO GOLD BAUBLE");
                 this.control.steerToFace(this.gold, false);
                 if(this.vel.angle().dist(this.pos.angleTo(this.gold)).deg() < 45) this.timeout = new Timeout(Duration.ofSeconds(5));
@@ -89,7 +98,7 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
             }
 
             if(this.bauble == null || !this.attainable(this.bauble.pos.as()) || !this.bauble.scan()) {
-                this.status("LOCATE BAUBLE");
+                this.status("LOCATE LOCAL BAUBLE");
 
                 final Set potential = this.radar.scanFull().filter(
                     unit -> {
@@ -106,44 +115,17 @@ public class HungryHungryBaubles extends NCli.ShipComputer {
                 if(targets.size() > 0) {
                     this.bauble = targets.get(0);
 
-                    this.status("STEER TO LOCAL BAUBLE");
+                    this.status("LOCKON LOCAL BAUBLE");
                     this.control.steerToFace(this.unwrap(this.bauble.pos.as()), false);
                 } else {
                     this.bauble = null;
 
-                    this.control.steerToFace(this.gold, false);
+                    this.status("NO LOCAL BAUBLE");
+                    if(this.gold != null) this.control.steerToFace(this.gold, false);
                 }
             } else {
-                this.status("STEER TO LOCAL BAUBLE");
+                this.status("LOCKED ONTO LOCAL BAUBLE");
                 this.control.steerToFace(this.unwrap(this.bauble.pos.as()), false);
-            }
-
-            if(this.target == null || !this.target.scan()) {
-                final Set targets = scan.filter(unit -> unit.kind == UnitKind.Ship);
-
-                this.status("TARGET");
-
-                final Iterator<Unit> iter = targets.units.values().iterator();
-
-                while(true) {
-                    if(!iter.hasNext()) continue $;
-
-                    this.target = iter.next();
-
-                    if(this.target.scan()) break;
-                }
-            }
-
-            Vec targetPos = this.target.pos.as();
-            Vec targetVel = this.target.vel.as();
-            Vec intercept = Utils.calculateInterceptPosition(this.pos, this.ang, this.vel, targetPos, targetVel, NCli.Sim.TORPEDO_SPEED);
-
-            if(this.pos.angleTo(intercept).dist(this.ang).abs().deg() <= 4) {
-                this.status("FIRING");
-                this.control.fire(Direction.Forward);
-            } else {
-                this.status("LOCKING");
-                this.control.face(intercept);
             }
         }
     }

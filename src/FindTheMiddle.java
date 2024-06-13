@@ -6,8 +6,8 @@ import lib.NCli;
 
 public class FindTheMiddle extends NCli.ShipComputer {
     public static void main(final String[] args) throws Exception {
-        if(System.getenv("COMPUTERNAME") == "PRECURSOR") new NCli("localhost", new Survivor()); // local
-        else new NCli("10.56.156.234", new Survivor()); // class
+        if(System.getenv("COMPUTERNAME") == "PRECURSOR") new NCli("localhost", new FindTheMiddle()); // local
+        else new NCli("10.56.98.229", new FindTheMiddle()); // class
     }
 
     private NCli.Vec center;
